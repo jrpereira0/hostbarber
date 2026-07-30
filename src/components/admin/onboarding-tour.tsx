@@ -36,10 +36,7 @@ import {
   type TourPhaseId,
   type TourStepDef,
 } from "@/lib/onboarding";
-import {
-  completeOnboarding,
-  skipOnboarding,
-} from "@/app/admin/(panel)/primeiros-passos/actions";
+import { completeOnboarding } from "@/app/admin/(panel)/primeiros-passos/actions";
 
 type OnboardingTourProps = {
   shopId: string;
@@ -322,16 +319,22 @@ export function OnboardingTour({
     goToStep("settings-tabs");
   }
 
+  function openCelebration() {
+    setActiveId(null);
+    setPausedId(null);
+    setTargetRect(null);
+    setWelcomeOpen(false);
+    // Encerrou de vez: some da sidebar (só o X deixa retomar).
+    writeStoredStep(shopId, null);
+    setCelebrationOpen(true);
+  }
+
   function nextStep() {
     if (!activeId || activeId === "welcome") return;
     const idx = stepIndex(activeId);
     if (idx < 0) return;
     if (idx >= TOUR_STEPS.length - 1) {
-      setActiveId(null);
-      setPausedId(null);
-      setTargetRect(null);
-      setWelcomeOpen(false);
-      setCelebrationOpen(true);
+      openCelebration();
       return;
     }
     goToStep(TOUR_STEPS[idx + 1].id);
@@ -362,12 +365,9 @@ export function OnboardingTour({
     resumeFromStorage();
   }
 
-  function finishTour(kind: "complete" | "skip") {
+  function finishTour() {
     startTransition(async () => {
-      const result =
-        kind === "complete"
-          ? await completeOnboarding()
-          : await skipOnboarding();
+      const result = await completeOnboarding();
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -377,16 +377,13 @@ export function OnboardingTour({
       setPausedId(null);
       setWelcomeOpen(false);
       setCelebrationOpen(false);
-      if (kind === "skip") {
-        toast.success("Guia encerrado. Retome quando quiser pela sidebar.");
-      }
       router.push("/admin");
       router.refresh();
     });
   }
 
   function confirmCelebration() {
-    finishTour("complete");
+    finishTour();
   }
 
   if (!mounted || (status.completed && !celebrationOpen)) return null;
@@ -403,7 +400,7 @@ export function OnboardingTour({
             waiting={!targetRect}
             onNext={nextStep}
             onPrev={prevStep}
-            onSkip={() => finishTour("skip")}
+            onSkip={openCelebration}
             onClose={pauseTour}
           />,
           document.body
@@ -463,8 +460,8 @@ export function OnboardingTour({
 
           <p className={cn("text-xs leading-relaxed", ADMIN_SURFACE.muted)}>
             {progressTotal} passos no total · alguns são opcionais (dias
-            especiais, recepção e produtos). Se fechar o guia, retome pela
-            sidebar em Continuar guia.
+            especiais, recepção e produtos). O X no balão pausa e você retoma
+            depois pela sidebar; Encerrar guia finaliza.
           </p>
 
           <DialogFooter className="flex-col gap-2 border-white/10 bg-transparent sm:flex-col">
@@ -481,7 +478,7 @@ export function OnboardingTour({
               variant="ghost"
               className="w-full text-[#b4b6bb] hover:bg-white/5 hover:text-[#f5f5f5]"
               disabled={pending}
-              onClick={() => finishTour("skip")}
+              onClick={openCelebration}
             >
               Agora não
             </Button>
@@ -489,7 +486,12 @@ export function OnboardingTour({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={celebrationOpen} onOpenChange={setCelebrationOpen}>
+      <Dialog
+        open={celebrationOpen}
+        onOpenChange={(open) => {
+          if (open) setCelebrationOpen(true);
+        }}
+      >
         <DialogContent
           className="max-w-md border-white/10 bg-[#151618] text-[#f5f5f5] sm:rounded-2xl"
           showCloseButton={false}
@@ -499,12 +501,12 @@ export function OnboardingTour({
               <CheckCircle2 className="size-5" />
             </div>
             <DialogTitle className="text-xl text-[#f5f5f5]">
-              Você passou por todos os módulos
+              Você conheceu o painel
             </DialogTitle>
             <DialogDescription className="text-[#b4b6bb]">
-              Configurações, equipe, serviços, agenda, caixa e financeiro —
-              o painel inteiro. Agora é só preencher os dados da sua loja e
-              começar a usar no dia a dia.
+              Passamos pelos módulos principais: configurações, equipe,
+              serviços, agenda, caixa e financeiro. Agora é preencher os dados
+              da sua loja e começar a usar no dia a dia.
             </DialogDescription>
           </DialogHeader>
 
@@ -642,7 +644,8 @@ function TourOverlay({
             type="button"
             onClick={onClose}
             className="rounded-md p-1 text-[#b4b6bb] hover:bg-white/5 hover:text-[#f5f5f5]"
-            aria-label="Minimizar guia"
+            aria-label="Pausar guia para retomar depois"
+            title="Pausar — retoma depois na sidebar"
           >
             <X className="size-4" />
           </button>

@@ -29,10 +29,6 @@ export async function completeOnboarding(): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function skipOnboarding(): Promise<ActionResult> {
-  return completeOnboarding();
-}
-
 /** Garante categoria padrão para o passo de produtos do guia. */
 export async function ensureDefaultProductCategory(): Promise<
   ActionResult & { categoryId?: string }
