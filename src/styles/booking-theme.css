@@ -88,10 +88,14 @@
 }
 
 .booking-theme [data-slot="input"],
-.booking-theme input:not([type="checkbox"]):not([type="radio"]) {
+.booking-theme input:not([type="checkbox"]):not([type="radio"]),
+.booking-theme textarea,
+.booking-theme select {
   border-color: var(--border);
   background: var(--input);
   color: var(--foreground);
+  /* iOS dá zoom se o campo tiver fonte < 16px */
+  font-size: 16px;
 }
 
 .booking-theme [data-slot="input"]:focus-visible,

@@ -1,9 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Outfit } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
+
+/** Evita zoom automático no iPhone (foco em campos / abertura da página). */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 const geistSans = Geist({
   variable: "--font-sans",
