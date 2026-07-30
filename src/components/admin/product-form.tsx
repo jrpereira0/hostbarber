@@ -55,6 +55,8 @@ type ProductFormProps = {
   productId?: string;
   onSubmit: (formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
+  /** Se definido, não redireciona para a lista após salvar. */
+  onSaved?: () => void;
 };
 
 function formatCentsInput(cents: number): string {
@@ -96,6 +98,7 @@ export function ProductForm({
   productId,
   onSubmit,
   submitLabel,
+  onSaved,
 }: ProductFormProps) {
   const router = useRouter();
   const [preview, setPreview] = useState<string | null>(
@@ -144,8 +147,13 @@ export function ProductForm({
       toast.success(
         initialValues ? "Produto atualizado." : "Produto cadastrado."
       );
-      router.push("/admin/produtos");
-      router.refresh();
+      if (onSaved) {
+        onSaved();
+        router.refresh();
+      } else {
+        router.push("/admin/produtos");
+        router.refresh();
+      }
     } else {
       toast.error(result.error);
     }

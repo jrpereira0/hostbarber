@@ -76,6 +76,8 @@ type ProfessionalFormProps = {
   onSubmit: (formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
   isEdit?: boolean;
+  /** Se definido, não redireciona para a lista após salvar. */
+  onSaved?: () => void;
   /** Só na edição: painel de comissões / histórico de pagamentos. */
   commissions?: {
     professionalId: string;
@@ -120,6 +122,7 @@ export function ProfessionalForm({
   onSubmit,
   submitLabel,
   isEdit = false,
+  onSaved,
   commissions,
 }: ProfessionalFormProps) {
   const router = useRouter();
@@ -220,8 +223,14 @@ export function ProfessionalForm({
       toast.success(
         isEdit ? "Profissional atualizado." : "Profissional cadastrado."
       );
-      router.push("/admin/profissionais");
-      router.refresh();
+      if (onSaved) {
+        onSaved();
+        router.refresh();
+        setSaving(false);
+      } else {
+        router.push("/admin/profissionais");
+        router.refresh();
+      }
     } else {
       toast.error(result.error);
       setSaving(false);

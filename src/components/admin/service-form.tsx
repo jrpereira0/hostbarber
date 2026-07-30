@@ -62,6 +62,8 @@ type ServiceFormProps = {
   onSubmit: (formData: FormData) => Promise<ActionResult>;
   submitLabel: string;
   isEdit?: boolean;
+  /** Se definido, não redireciona para a lista após salvar. */
+  onSaved?: () => void;
 };
 
 function buildInitialWeekdayRows(
@@ -115,6 +117,7 @@ export function ServiceForm({
   onSubmit,
   submitLabel,
   isEdit = false,
+  onSaved,
 }: ServiceFormProps) {
   const router = useRouter();
   const [preview, setPreview] = useState<string | null>(
@@ -239,8 +242,14 @@ export function ServiceForm({
 
     if (result.ok) {
       toast.success(isEdit ? "Serviço atualizado." : "Serviço cadastrado.");
-      router.push("/admin/servicos");
-      router.refresh();
+      if (onSaved) {
+        onSaved();
+        router.refresh();
+        setSaving(false);
+      } else {
+        router.push("/admin/servicos");
+        router.refresh();
+      }
     } else {
       toast.error(result.error);
       setSaving(false);

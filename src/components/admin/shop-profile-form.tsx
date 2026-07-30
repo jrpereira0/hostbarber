@@ -35,6 +35,9 @@ export type ShopProfileValues = {
 
 type ShopProfileFormProps = {
   initialValues: ShopProfileValues;
+  /** Chamado após salvar com sucesso (ex.: onboarding avança a etapa). */
+  onSaved?: () => void;
+  submitLabel?: string;
 };
 
 function DarkLabel({
@@ -55,7 +58,11 @@ function FieldHint({ children }: { children: React.ReactNode }) {
   return <p className={cn("text-xs", ADMIN_SURFACE.muted)}>{children}</p>;
 }
 
-export function ShopProfileForm({ initialValues }: ShopProfileFormProps) {
+export function ShopProfileForm({
+  initialValues,
+  onSaved,
+  submitLabel = "Salvar alterações",
+}: ShopProfileFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(
@@ -129,6 +136,7 @@ export function ShopProfileForm({ initialValues }: ShopProfileFormProps) {
 
     if (result.ok) {
       toast.success("Configurações salvas.");
+      onSaved?.();
       router.refresh();
     } else {
       toast.error(result.error);
@@ -396,7 +404,7 @@ export function ShopProfileForm({ initialValues }: ShopProfileFormProps) {
               ADMIN_SURFACE.btnPrimary
             )}
           >
-            {saving ? "Salvando..." : "Salvar perfil"}
+            {saving ? "Salvando..." : submitLabel}
           </Button>
         </div>
       </div>

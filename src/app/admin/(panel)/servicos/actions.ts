@@ -182,6 +182,7 @@ export async function createService(formData: FormData): Promise<ActionResult> {
   await syncProfessionals(service.id, parsed.data.professionalIds, session.shopId);
 
   revalidatePath("/admin/servicos");
+  revalidatePath("/admin/primeiros-passos");
   return { ok: true };
 }
 

@@ -35,6 +35,8 @@ type BusinessHoursFormProps = {
   initialDays: BusinessDay[];
   initialSlotStep: number;
   readOnly?: boolean;
+  onSaved?: () => void;
+  submitLabel?: string;
 };
 
 function DarkLabel({
@@ -55,6 +57,8 @@ export function BusinessHoursForm({
   initialDays,
   initialSlotStep,
   readOnly = false,
+  onSaved,
+  submitLabel = "Salvar horários",
 }: BusinessHoursFormProps) {
   const router = useRouter();
   const [days, setDays] = useState(initialDays);
@@ -72,6 +76,7 @@ export function BusinessHoursForm({
     const result = await saveBusinessHours(days, slotStep);
     if (result.ok) {
       toast.success("Horário da barbearia salvo.");
+      onSaved?.();
       router.refresh();
     } else {
       toast.error(result.error);
@@ -194,7 +199,7 @@ export function BusinessHoursForm({
               ADMIN_SURFACE.btnPrimary
             )}
           >
-            {saving ? "Salvando..." : "Salvar horário"}
+            {saving ? "Salvando..." : submitLabel}
           </Button>
         </div>
       )}

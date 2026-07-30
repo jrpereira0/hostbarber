@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { requireServerClient } from "@/lib/supabase/server";
 import { requireAdminClient } from "@/lib/supabase/admin";
@@ -34,19 +33,10 @@ import {
   getOnboardingStatus,
   ONBOARDING_PATH,
 } from "@/lib/onboarding";
-import { OnboardingBanner } from "@/components/admin/onboarding-banner";
 
 type PageProps = {
   searchParams: Promise<{ date?: string }>;
 };
-
-const STEP_LABELS = {
-  shop: "perfil da loja",
-  team: "equipe",
-  services: "serviços",
-  products: "produtos",
-  cash: "caixa",
-} as const;
 
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const session = await getAdminSession();
@@ -59,20 +49,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
   const supabase = await requireServerClient();
 
-  let onboardingBanner: ReactNode = null;
   if (session.isOwner) {
     const onboarding = await getOnboardingStatus(supabase, session.shopId);
-    if (onboarding.needsGuidedSetup) {
-      redirect(ONBOARDING_PATH);
-    }
     if (!onboarding.completed) {
-      onboardingBanner = (
-        <OnboardingBanner
-          nextLabel={STEP_LABELS[onboarding.nextStepId]}
-          requiredDone={onboarding.requiredDone}
-          requiredTotal={onboarding.requiredTotal}
-        />
-      );
+      redirect(ONBOARDING_PATH);
     }
   }
 
@@ -303,34 +283,31 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   });
 
   return (
-    <div className="flex flex-col gap-4">
-      {onboardingBanner}
-      <AgendaView
-        date={date}
-        today={today}
-        isOwner={session.isOwner}
-        canViewAllAgendas={viewAllAgendas}
-        professionalId={session.professionalId}
-        permissions={session.permissions}
-        dayContext={dayContext}
-        appointments={appointments}
-        services={buildAdminServicesCatalogForDate(
-          services ?? [],
-          pricingContext,
-          bookingCounts
-        )}
-        productsCatalog={productsCatalog}
-        cashRegister={cashRegister}
-        shopName={shopSettings?.name ?? ""}
-        confirmationWhatsappMessage={
-          shopSettings?.confirmation_whatsapp_message?.trim()
-            ? shopSettings.confirmation_whatsapp_message
-            : DEFAULT_CONFIRMATION_WHATSAPP_MESSAGE
-        }
-        confirmationWhatsappEnabled={
-          shopSettings?.confirmation_whatsapp_enabled ?? true
-        }
-      />
-    </div>
+    <AgendaView
+      date={date}
+      today={today}
+      isOwner={session.isOwner}
+      canViewAllAgendas={viewAllAgendas}
+      professionalId={session.professionalId}
+      permissions={session.permissions}
+      dayContext={dayContext}
+      appointments={appointments}
+      services={buildAdminServicesCatalogForDate(
+        services ?? [],
+        pricingContext,
+        bookingCounts
+      )}
+      productsCatalog={productsCatalog}
+      cashRegister={cashRegister}
+      shopName={shopSettings?.name ?? ""}
+      confirmationWhatsappMessage={
+        shopSettings?.confirmation_whatsapp_message?.trim()
+          ? shopSettings.confirmation_whatsapp_message
+          : DEFAULT_CONFIRMATION_WHATSAPP_MESSAGE
+      }
+      confirmationWhatsappEnabled={
+        shopSettings?.confirmation_whatsapp_enabled ?? true
+      }
+    />
   );
 }

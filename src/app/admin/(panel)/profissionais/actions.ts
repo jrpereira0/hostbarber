@@ -258,6 +258,7 @@ export async function createProfessional(
 
   revalidatePath("/admin/profissionais");
   revalidatePath("/admin/configuracoes");
+  revalidatePath("/admin/primeiros-passos");
   revalidatePath("/agenda");
   return { ok: true };
 }
@@ -351,6 +352,7 @@ export async function updateProfessional(
 
   revalidatePath("/admin/profissionais");
   revalidatePath("/admin/configuracoes");
+  revalidatePath("/admin/primeiros-passos");
   revalidatePath("/agenda");
   return { ok: true };
 }

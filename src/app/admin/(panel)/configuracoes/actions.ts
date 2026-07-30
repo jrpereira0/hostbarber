@@ -96,6 +96,7 @@ export async function saveBusinessHours(
   revalidatePath(SETTINGS_PATH);
   revalidatePath(BOOKING_PATH);
   revalidatePath(`${BOOKING_PATH}/[slug]`, "page");
+  revalidatePath("/admin/primeiros-passos");
   return { ok: true };
 }
 
@@ -268,6 +269,7 @@ export async function saveShopProfile(formData: FormData): Promise<ActionResult>
   revalidatePath(SETTINGS_PATH);
   revalidatePath(BOOKING_PATH);
   revalidatePath(`${BOOKING_PATH}/[slug]`, "page");
+  revalidatePath("/admin/primeiros-passos");
   return { ok: true };
 }
 

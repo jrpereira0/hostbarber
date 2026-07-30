@@ -133,6 +133,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
   }
 
   revalidatePath("/admin/produtos");
+  revalidatePath("/admin/primeiros-passos");
   return { ok: true };
 }
 

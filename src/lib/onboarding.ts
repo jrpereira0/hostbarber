@@ -24,7 +24,7 @@ export type OnboardingStatus = {
   /** Quantos passos obrigatórios estão prontos (sem contar caixa). */
   requiredDone: number;
   requiredTotal: number;
-  /** Falta o essencial (equipe ou serviços) — vale redirecionar. */
+  /** Falta concluir o onboarding — manter o dono no fluxo guiado. */
   needsGuidedSetup: boolean;
   /** Próximo passo ainda incompleto (ou caixa se o resto estiver ok). */
   nextStepId: OnboardingStepId;
@@ -121,7 +121,7 @@ export async function getOnboardingStatus(
     steps.find((s) => s.id === id)?.done
   ).length;
 
-  const needsGuidedSetup = !completed && (!teamDone || !servicesDone);
+  const needsGuidedSetup = !completed;
 
   let nextStepId: OnboardingStepId = "cash";
   if (!shopDone) nextStepId = "shop";
