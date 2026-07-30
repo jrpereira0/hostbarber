@@ -12,7 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowRight, ListChecks, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, ListChecks, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +28,7 @@ import {
   TOUR_PHASES,
   TOUR_STEPS,
   isTourStepDone,
+  notifyTourProgress,
   tourStorageKey,
   type OnboardingStatus,
   type OnboardingStepId,
@@ -44,6 +45,7 @@ type OnboardingTourProps = {
   shopName: string;
   status: OnboardingStatus;
   forceWelcome?: boolean;
+  forceResume?: boolean;
 };
 
 type Rect = { top: number; left: number; width: number; height: number };
@@ -68,6 +70,7 @@ function writeStoredStep(shopId: string, step: OnboardingStepId | null) {
   } catch {
     // ignore
   }
+  notifyTourProgress();
 }
 
 function stepIndex(id: OnboardingStepId): number {
@@ -115,12 +118,14 @@ export function OnboardingTour({
   shopName,
   status,
   forceWelcome = false,
+  forceResume = false,
 }: OnboardingTourProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [celebrationOpen, setCelebrationOpen] = useState(false);
   const [activeId, setActiveId] = useState<OnboardingStepId | null>(null);
   const [pausedId, setPausedId] = useState<OnboardingStepId | null>(null);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
@@ -132,12 +137,26 @@ export function OnboardingTour({
     const frame = requestAnimationFrame(() => {
       setMounted(true);
       const stored = readStoredStep(shopId);
+      const validStored =
+        stored &&
+        stored !== "welcome" &&
+        stored !== "done" &&
+        TOUR_STEPS.some((s) => s.id === stored)
+          ? stored
+          : null;
+
+      if (forceResume && validStored) {
+        setWelcomeOpen(false);
+        setPausedId(null);
+        setActiveId(validStored);
+        router.replace("/admin", { scroll: false });
+        return;
+      }
+
       if (forceWelcome) {
         setWelcomeOpen(true);
         setActiveId(null);
-        setPausedId(
-          stored && TOUR_STEPS.some((s) => s.id === stored) ? stored : null
-        );
+        setPausedId(validStored);
         return;
       }
       if (!stored || stored === "welcome") {
@@ -147,19 +166,20 @@ export function OnboardingTour({
         return;
       }
       if (stored === "done") return;
-      if (!TOUR_STEPS.some((s) => s.id === stored)) {
+      if (!validStored) {
         setWelcomeOpen(true);
         setActiveId(null);
         setPausedId(null);
         return;
       }
-      // Já começou: mostra a barra de progresso até a pessoa continuar.
+      // Pausado: retoma pela sidebar (Continuar guia).
       setWelcomeOpen(false);
       setActiveId(null);
-      setPausedId(stored);
+      setPausedId(validStored);
+      notifyTourProgress();
     });
     return () => cancelAnimationFrame(frame);
-  }, [shopId, forceWelcome]);
+  }, [shopId, forceWelcome, forceResume, router]);
 
   const activeStep: TourStepDef | null = useMemo(() => {
     if (!activeId || activeId === "welcome" || activeId === "done") return null;
@@ -171,10 +191,6 @@ export function OnboardingTour({
     ? Math.max(0, stepIndex(progressStepId))
     : 0;
   const progressTotal = TOUR_STEPS.length;
-  const progressCurrent = progressStepId
-    ? Math.min(progressTotal, Math.max(1, stepIndex(progressStepId) + 1))
-    : 0;
-  const progressBarPct = Math.round((progressCurrent / progressTotal) * 100);
 
   const measureTarget = useCallback(
     (allowScroll: boolean) => {
@@ -277,7 +293,11 @@ export function OnboardingTour({
     const idx = stepIndex(activeId);
     if (idx < 0) return;
     if (idx >= TOUR_STEPS.length - 1) {
-      finishTour("complete");
+      setActiveId(null);
+      setPausedId(null);
+      setTargetRect(null);
+      setWelcomeOpen(false);
+      setCelebrationOpen(true);
       return;
     }
     goToStep(TOUR_STEPS[idx + 1].id);
@@ -331,17 +351,20 @@ export function OnboardingTour({
       setActiveId(null);
       setPausedId(null);
       setWelcomeOpen(false);
-      toast.success(
-        kind === "complete"
-          ? "Guia concluído. Sua loja está pronta para operar."
-          : "Guia encerrado. Retome quando quiser pelo menu."
-      );
+      setCelebrationOpen(false);
+      if (kind === "skip") {
+        toast.success("Guia encerrado. Retome quando quiser pela sidebar.");
+      }
       router.push("/admin");
       router.refresh();
     });
   }
 
-  if (!mounted || status.completed) return null;
+  function confirmCelebration() {
+    finishTour("complete");
+  }
+
+  if (!mounted || (status.completed && !celebrationOpen)) return null;
 
   const balloon =
     activeStep && !welcomeOpen
@@ -357,20 +380,6 @@ export function OnboardingTour({
             onPrev={prevStep}
             onSkip={() => finishTour("skip")}
             onClose={pauseTour}
-          />,
-          document.body
-        )
-      : null;
-
-  const progressDock =
-    !welcomeOpen && !activeStep && pausedId
-      ? createPortal(
-          <TourProgressDock
-            current={progressCurrent}
-            total={progressTotal}
-            percent={progressBarPct}
-            onContinue={resumeTour}
-            onOverview={() => setWelcomeOpen(true)}
           />,
           document.body
         )
@@ -429,7 +438,8 @@ export function OnboardingTour({
 
           <p className={cn("text-xs leading-relaxed", ADMIN_SURFACE.muted)}>
             {progressTotal} passos no total · alguns são opcionais (dias
-            especiais, recepção e produtos).
+            especiais, recepção e produtos). Se fechar o guia, retome pela
+            sidebar em Continuar guia.
           </p>
 
           <DialogFooter className="flex-col gap-2 border-white/10 bg-transparent sm:flex-col">
@@ -454,58 +464,57 @@ export function OnboardingTour({
         </DialogContent>
       </Dialog>
 
-      {balloon}
-      {progressDock}
-    </>
-  );
-}
-
-function TourProgressDock({
-  current,
-  total,
-  percent,
-  onContinue,
-  onOverview,
-}: {
-  current: number;
-  total: number;
-  percent: number;
-  onContinue: () => void;
-  onOverview: () => void;
-}) {
-  return (
-    <div className="fixed bottom-4 left-3 z-40 w-[min(340px,calc(100vw-1.5rem))] rounded-2xl border border-white/15 bg-[#151618] p-3 shadow-2xl md:bottom-5 md:left-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-[#f5f5f5]">Guia do painel</p>
-          <p className={cn("mt-0.5 text-[11px] tabular-nums", ADMIN_SURFACE.muted)}>
-            Passo {current} de {total} · continue para conhecer o sistema
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onOverview}
-          className="rounded-md p-1 text-[#b4b6bb] hover:bg-white/5 hover:text-[#f5f5f5]"
-          aria-label="Ver resumo do guia"
+      <Dialog open={celebrationOpen} onOpenChange={setCelebrationOpen}>
+        <DialogContent
+          className="max-w-md border-white/10 bg-[#151618] text-[#f5f5f5] sm:rounded-2xl"
+          showCloseButton={false}
         >
-          <ListChecks className="size-4" />
-        </button>
-      </div>
-      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-[#ecf15e] transition-[width] duration-300"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-      <Button
-        type="button"
-        className={cn(ADMIN_SURFACE.btnPrimary, "mt-3 h-9 w-full")}
-        onClick={onContinue}
-      >
-        Continuar guia
-        <ArrowRight className="size-4" />
-      </Button>
-    </div>
+          <DialogHeader>
+            <div className="mb-2 flex size-11 items-center justify-center rounded-xl border border-[rgb(236_241_94_/_30%)] bg-[rgb(236_241_94_/_10%)] text-[#ecf15e]">
+              <CheckCircle2 className="size-5" />
+            </div>
+            <DialogTitle className="text-xl text-[#f5f5f5]">
+              Você passou por todos os módulos
+            </DialogTitle>
+            <DialogDescription className="text-[#b4b6bb]">
+              Configurações, equipe, serviços, agenda, caixa e financeiro —
+              o painel inteiro. Agora é só preencher os dados da sua loja e
+              começar a usar no dia a dia.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ul className="space-y-2 py-1 text-sm text-[#c8c9cd]">
+            {(Object.keys(TOUR_PHASES) as TourPhaseId[]).map((phaseId) => (
+              <li key={phaseId} className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#ecf15e]" />
+                <span>
+                  <span className="font-medium text-[#f5f5f5]">
+                    {TOUR_PHASES[phaseId].label}
+                  </span>
+                  <span className={cn("ml-1", ADMIN_SURFACE.muted)}>
+                    — {TOUR_PHASES[phaseId].description}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <DialogFooter className="flex-col gap-2 border-white/10 bg-transparent sm:flex-col">
+            <Button
+              type="button"
+              className={cn(ADMIN_SURFACE.btnPrimary, "w-full")}
+              disabled={pending}
+              onClick={confirmCelebration}
+            >
+              Preencher e começar a usar
+              <ArrowRight className="size-4" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {balloon}
+    </>
   );
 }
 

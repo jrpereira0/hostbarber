@@ -325,6 +325,39 @@ export function tourStorageKey(shopId: string) {
   return `hostbarber-onboarding-tour:v2:${shopId}`;
 }
 
+/** Evento disparado quando o progresso do guia muda (sidebar escuta). */
+export const TOUR_PROGRESS_EVENT = "hostbarber-tour-progress";
+
+export function notifyTourProgress() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(TOUR_PROGRESS_EVENT));
+}
+
+export function readTourProgress(shopId: string): {
+  stepId: string;
+  current: number;
+  total: number;
+  percent: number;
+} | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(tourStorageKey(shopId));
+    if (!raw || raw === "welcome" || raw === "done") return null;
+    const index = TOUR_STEPS.findIndex((s) => s.id === raw);
+    if (index < 0) return null;
+    const current = index + 1;
+    const total = TOUR_STEPS.length;
+    return {
+      stepId: raw,
+      current,
+      total,
+      percent: Math.round((current / total) * 100),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function isTourStepDone(
   id: string,
   status: OnboardingStatus

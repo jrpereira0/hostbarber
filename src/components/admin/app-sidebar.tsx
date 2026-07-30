@@ -8,7 +8,6 @@ import {
   Contact,
   ExternalLink,
   History,
-  ListChecks,
   LogOut,
   Package,
   Percent,
@@ -33,6 +32,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { signOut } from "@/app/admin/(panel)/actions";
 import { BrandLogo } from "@/components/brand-logo";
+import { SidebarOnboardingLink } from "@/components/admin/sidebar-onboarding-link";
 import { BOOKING_PATH } from "@/lib/booking-path";
 import { cn } from "@/lib/utils";
 import type { AdminRole } from "@/lib/require-admin";
@@ -103,6 +103,7 @@ type AppSidebarProps = {
   bookingHref?: string;
   /** Mostra atalho de onboarding para o dono. */
   showOnboarding?: boolean;
+  shopId?: string;
 };
 
 function isNavActive(pathname: string, url: string): boolean {
@@ -123,6 +124,7 @@ export function AppSidebar({
   userEmail,
   bookingHref = BOOKING_PATH,
   showOnboarding = false,
+  shopId,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
@@ -206,20 +208,8 @@ export function AppSidebar({
           <SidebarGroupLabel>Conta</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {isOwner && showOnboarding ? (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={false}
-                    tooltip="Guia inicial"
-                    onClick={() => setOpenMobile(false)}
-                  >
-                    <Link href="/admin?guia=1">
-                      <ListChecks />
-                      <span>Guia inicial</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+              {isOwner && showOnboarding && shopId ? (
+                <SidebarOnboardingLink shopId={shopId} />
               ) : null}
 
               {isOwner ? (

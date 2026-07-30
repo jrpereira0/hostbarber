@@ -95,6 +95,7 @@ export default async function AdminLayout({
           userEmail={user.email ?? ""}
           bookingHref={bookingHref}
           showOnboarding={Boolean(showOnboarding)}
+          shopId={profile.shop_id}
         />
         <AdminPanelInset>
           <AdminSidebarToggle />
