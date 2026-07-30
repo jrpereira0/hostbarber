@@ -129,6 +129,7 @@ export function ExceptionsCard({
 
   return (
     <div
+      data-tour="tour-settings-exceptions"
       className={cn(
         ADMIN_SURFACE.panel,
         "flex flex-col gap-4 p-4 sm:gap-5 sm:p-6"

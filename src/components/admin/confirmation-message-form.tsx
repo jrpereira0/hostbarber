@@ -93,6 +93,7 @@ export function ConfirmationMessageForm({
 
   return (
     <form
+      data-tour="tour-settings-messages"
       onSubmit={handleSubmit}
       className={cn(ADMIN_SURFACE.panel, "flex flex-col gap-6 p-4 sm:p-5")}
     >

@@ -115,28 +115,19 @@ export function SettingsView({
       </div>
 
       <TabsContent value="perfil" className="mt-0" forceMount>
-        <div
-          data-tour="tour-settings-profile"
-          className={cn(tab !== "perfil" && "hidden")}
-        >
+        <div className={cn(tab !== "perfil" && "hidden")}>
           <ShopProfileForm initialValues={profile} />
         </div>
       </TabsContent>
 
       <TabsContent value="link" className="mt-0" forceMount>
-        <div
-          data-tour="tour-settings-link"
-          className={cn(tab !== "link" && "hidden")}
-        >
+        <div className={cn(tab !== "link" && "hidden")}>
           <BookingLinkForm initialSlug={slug} />
         </div>
       </TabsContent>
 
       <TabsContent value="horarios" className="mt-0" forceMount>
-        <div
-          data-tour="tour-settings-hours"
-          className={cn(tab !== "horarios" && "hidden")}
-        >
+        <div className={cn(tab !== "horarios" && "hidden")}>
           <BusinessHoursForm
             initialDays={businessDays}
             initialSlotStep={slotStepMinutes}
@@ -145,10 +136,7 @@ export function SettingsView({
       </TabsContent>
 
       <TabsContent value="excecoes" className="mt-0" forceMount>
-        <div
-          data-tour="tour-settings-exceptions"
-          className={cn(tab !== "excecoes" && "hidden")}
-        >
+        <div className={cn(tab !== "excecoes" && "hidden")}>
           <ExceptionsCard
             exceptions={exceptions}
             professionals={professionals}
@@ -157,10 +145,7 @@ export function SettingsView({
       </TabsContent>
 
       <TabsContent value="mensagens" className="mt-0" forceMount>
-        <div
-          data-tour="tour-settings-messages"
-          className={cn(tab !== "mensagens" && "hidden")}
-        >
+        <div className={cn(tab !== "mensagens" && "hidden")}>
           <ConfirmationMessageForm
             initialMessage={confirmationWhatsappMessage}
             initialEnabled={confirmationWhatsappEnabled}
@@ -170,10 +155,7 @@ export function SettingsView({
       </TabsContent>
 
       <TabsContent value="recepcao" className="mt-0" forceMount>
-        <div
-          data-tour="tour-settings-reception"
-          className={cn(tab !== "recepcao" && "hidden")}
-        >
+        <div className={cn(tab !== "recepcao" && "hidden")}>
           <ReceptionStaffForm initialStaff={receptionStaff} />
         </div>
       </TabsContent>

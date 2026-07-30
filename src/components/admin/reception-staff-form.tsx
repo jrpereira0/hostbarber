@@ -97,6 +97,7 @@ export function ReceptionStaffForm({ initialStaff }: ReceptionStaffFormProps) {
   return (
     <div className="flex flex-col gap-6">
       <form
+        data-tour="tour-settings-reception"
         onSubmit={handleCreate}
         className={cn(ADMIN_SURFACE.panel, "flex flex-col gap-5 p-4 sm:p-5")}
       >

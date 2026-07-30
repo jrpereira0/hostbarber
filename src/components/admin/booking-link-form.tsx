@@ -72,6 +72,7 @@ export function BookingLinkForm({ initialSlug }: BookingLinkFormProps) {
       autoComplete="off"
     >
       <div
+        data-tour="tour-settings-link"
         className={cn(
           ADMIN_SURFACE.panel,
           "flex flex-col gap-5 p-4 sm:gap-6 sm:p-6"

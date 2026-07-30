@@ -151,6 +151,7 @@ export function ShopProfileForm({
       autoComplete="off"
     >
       <div
+        data-tour="tour-settings-profile"
         className={cn(
           ADMIN_SURFACE.panel,
           "flex flex-col gap-5 p-4 sm:gap-6 sm:p-6"

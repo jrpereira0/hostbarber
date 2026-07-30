@@ -86,6 +86,7 @@ export function BusinessHoursForm({
 
   return (
     <div
+      data-tour="tour-settings-hours"
       className={cn(
         ADMIN_SURFACE.panel,
         "flex flex-col gap-4 p-4 sm:gap-5 sm:p-6"
