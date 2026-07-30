@@ -9,10 +9,8 @@ import { Label } from "@/components/ui/label";
 import { ProfessionalAvatar } from "@/components/admin/professional-avatar";
 import { SearchInput } from "@/components/admin/search-input";
 import { BookingDatePicker } from "@/components/booking/booking-date-picker";
-import {
-  ClientWhatsappAuth,
-  logoutClientSession,
-} from "@/components/booking/client-whatsapp-auth";
+import { ClientWhatsappAuth } from "@/components/booking/client-whatsapp-auth";
+import { useClientSession } from "@/components/booking/client-session-context";
 import { ServiceThumbnail } from "@/components/booking/service-thumbnail";
 import {
   formatDateBR,
@@ -234,6 +232,7 @@ function SlotGroups({
 
 export function BookingFlow({ catalog, today }: BookingFlowProps) {
   const shopSlug = catalog.shop.slug;
+  const clientSession = useClientSession();
   const maxDate = addDays(today, MAX_DAYS_AHEAD);
   const minDate = useMemo(
     () =>
@@ -517,7 +516,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
   }
 
   async function handleNotMe() {
-    await logoutClientSession();
+    await clientSession.clearSession();
     lastLookupDigitsRef.current = "";
     setWhatsapp("");
     setWhatsappVerified(false);

@@ -14,6 +14,12 @@
   --page-font-display: "Neue Montreal", "Aeonik", var(--font-outfit),
     var(--font-sans), system-ui, sans-serif;
 
+  /* Tokens shadcn no painel: evita switch/botão “branco” do .dark padrão */
+  --primary: #ecf15e;
+  --primary-foreground: #0e0f11;
+  --input: rgb(255 255 255 / 14%);
+  --ring: #ecf15e;
+
   font-family: var(--page-font-body);
   color: #f5f5f5;
   background: var(--page-bg);
@@ -88,6 +94,31 @@
   background: #1a1b1e !important;
   color: var(--page-accent) !important;
   border-color: rgb(236 241 94 / 28%) !important;
+}
+
+/* Interruptor: ligado = amarelo; desligado = cinza (usa data-state e aria-checked) */
+.admin-page [data-slot="switch"][data-state="unchecked"],
+.admin-page [data-slot="switch"][aria-checked="false"] {
+  border: 1px solid rgb(255 255 255 / 22%) !important;
+  background: rgb(255 255 255 / 14%) !important;
+}
+
+.admin-page [data-slot="switch"][data-state="checked"],
+.admin-page [data-slot="switch"][aria-checked="true"] {
+  border-color: transparent !important;
+  background: #ecf15e !important;
+}
+
+.admin-page [data-slot="switch"][data-state="unchecked"] [data-slot="switch-thumb"],
+.admin-page [data-slot="switch"][aria-checked="false"] [data-slot="switch-thumb"] {
+  background: #f5f5f5 !important;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 35%);
+}
+
+.admin-page [data-slot="switch"][data-state="checked"] [data-slot="switch-thumb"],
+.admin-page [data-slot="switch"][aria-checked="true"] [data-slot="switch-thumb"] {
+  background: #0e0f11 !important;
+  box-shadow: none;
 }
 
 .admin-page .page-chip {

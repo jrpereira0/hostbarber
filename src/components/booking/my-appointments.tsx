@@ -6,6 +6,7 @@ import { CalendarDays, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ClientWhatsappAuth } from "@/components/booking/client-whatsapp-auth";
+import { useClientSession } from "@/components/booking/client-session-context";
 import { ProfessionalAvatar } from "@/components/admin/professional-avatar";
 import { BookingDatePicker } from "@/components/booking/booking-date-picker";
 import { AppointmentCardsSkeleton } from "@/components/skeletons/appointment-cards-skeleton";
@@ -82,6 +83,7 @@ function statusTone(status?: string): { bg: string; text: string } {
 
 export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
   const shopSlug = catalog.shop.slug;
+  const clientSession = useClientSession();
   const maxDate = addDays(today, MAX_DAYS_AHEAD);
   const minDate = useMemo(
     () =>
@@ -205,6 +207,16 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
     },
     [fetchAppointments]
   );
+
+  useEffect(() => {
+    if (clientSession.status !== "anonymous") return;
+    if (step === "phone") return;
+    setStep("phone");
+    setWhatsappDigits("");
+    setAppointments([]);
+    setEditing(null);
+    setCancelTarget(null);
+  }, [clientSession.status, step]);
 
   const switchTab = (tab: ListTab) => {
     if (tab === listTab || step === "edit") return;

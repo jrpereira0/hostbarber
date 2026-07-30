@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Calendar, Phone, UserRound, Wallet } from "lucide-react";
@@ -15,10 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  ClientWhatsappAuth,
-  logoutClientSession,
-} from "@/components/booking/client-whatsapp-auth";
+import { ClientWhatsappAuth } from "@/components/booking/client-whatsapp-auth";
+import { useClientSession } from "@/components/booking/client-session-context";
 import { PhotoField } from "@/components/admin/photo-field";
 import { formatPriceBRL, formatWhatsapp } from "@/lib/format";
 import { withShopQuery } from "@/lib/booking-path";
@@ -30,7 +28,7 @@ import {
 type Phase = "auth" | "profile";
 
 export function MyAccount({ shopSlug }: { shopSlug: string }) {
-
+  const clientSession = useClientSession();
   const [phase, setPhase] = useState<Phase>("auth");
   const [whatsapp, setWhatsapp] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -116,6 +114,19 @@ export function MyAccount({ shopSlug }: { shopSlug: string }) {
     [loadProfile]
   );
 
+  useEffect(() => {
+    if (clientSession.status !== "anonymous") return;
+    if (phase === "auth") return;
+    setPhase("auth");
+    setWhatsapp("");
+    setFirstName("");
+    setLastName("");
+    setCreditCents(0);
+    resetPhotoDraft(null, DEFAULT_PHOTO_POSITION);
+    setHasProfile(false);
+    setEditing(false);
+  }, [clientSession.status, phase, resetPhotoDraft]);
+
   async function handleSave() {
     const nome = firstName.trim();
     const sobrenome = lastName.trim();
@@ -175,7 +186,7 @@ export function MyAccount({ shopSlug }: { shopSlug: string }) {
   async function handleLogout() {
     setLoggingOut(true);
     try {
-      await logoutClientSession();
+      await clientSession.clearSession();
       setLogoutOpen(false);
       setPhase("auth");
       setWhatsapp("");

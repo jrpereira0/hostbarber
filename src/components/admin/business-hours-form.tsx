@@ -99,28 +99,43 @@ export function BusinessHoursForm({
         description="Os barbeiros só atendem dentro desse horário."
       />
 
-      <div className="-mx-4 flex flex-col divide-y divide-white/10 sm:-mx-6">
+      <div className="flex flex-col gap-2">
         {days.map((day) => (
           <div
             key={day.weekday}
-            className="flex flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:px-6"
+            className={cn(
+              "flex flex-col gap-2.5 rounded-xl border px-3.5 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:px-4",
+              day.active
+                ? "border-white/10 bg-[#121316]"
+                : "border-white/5 bg-transparent"
+            )}
           >
-            <div className="flex w-full items-center gap-3 sm:w-32 sm:shrink-0">
+            <div className="flex min-w-0 flex-1 items-center gap-3 sm:max-w-[9.5rem]">
               <Switch
                 checked={day.active}
                 disabled={readOnly}
                 onCheckedChange={(checked) =>
                   updateDay(day.weekday, { active: checked })
                 }
-                aria-label={`${WEEKDAYS[day.weekday]} aberto`}
+                aria-label={`${WEEKDAYS[day.weekday]} ${day.active ? "aberto" : "fechado"}`}
               />
-              <span className="text-[15px] font-medium tracking-tight text-[#f5f5f5] sm:text-sm">
-                {WEEKDAYS[day.weekday]}
-              </span>
+              <div className="min-w-0">
+                <p className="text-[15px] font-medium tracking-tight text-[#f5f5f5] sm:text-sm">
+                  {WEEKDAYS[day.weekday]}
+                </p>
+                <p
+                  className={cn(
+                    "text-[11px]",
+                    day.active ? "text-[#ecf15e]/80" : ADMIN_SURFACE.muted
+                  )}
+                >
+                  {day.active ? "Aberto" : "Fechado"}
+                </p>
+              </div>
             </div>
 
             {day.active ? (
-              <div className="flex items-center gap-2 pl-11 sm:pl-0">
+              <div className="flex items-center gap-2 sm:ml-auto">
                 <Input
                   type="time"
                   value={day.openTime}
@@ -147,16 +162,7 @@ export function BusinessHoursForm({
                   )}
                 />
               </div>
-            ) : (
-              <span
-                className={cn(
-                  "pl-11 text-sm sm:pl-0",
-                  ADMIN_SURFACE.muted
-                )}
-              >
-                Fechado
-              </span>
-            )}
+            ) : null}
           </div>
         ))}
       </div>
