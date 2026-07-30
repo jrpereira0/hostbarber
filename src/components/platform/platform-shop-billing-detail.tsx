@@ -75,7 +75,7 @@ import { PlatformDeleteShopControl } from "@/components/platform/platform-delete
 import { ADMIN_SURFACE } from "@/lib/admin-surface";
 import { cn } from "@/lib/utils";
 
-const DUE_DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
+const DUE_DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 function DarkLabel({
   htmlFor,
@@ -398,7 +398,7 @@ export function PlatformShopBillingDetail({
               </SelectContent>
             </Select>
             <FieldHint>
-              Limitado ao dia 28 pra funcionar em fevereiro e nos outros meses.
+              Em meses mais curtos (ex.: fevereiro), usa o último dia do mês.
             </FieldHint>
           </div>
         </AdminFormFields>

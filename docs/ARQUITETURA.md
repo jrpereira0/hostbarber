@@ -1,6 +1,6 @@
 # Arquitetura — HOSTBARBER
 
-Atualizado conforme o sistema evolui (última revisão: jul/2026).
+Atualizado conforme o sistema evolui (última revisão: 30/jul/2026).
 
 ## Visão geral
 
@@ -29,17 +29,20 @@ Atualizado conforme o sistema evolui (última revisão: jul/2026).
 | `src/app/admin/(panel)/financeiro` | Painel financeiro (métricas por período), histórico de caixas e comissões (somente dono) |
 | `src/app/admin/(panel)/comandas` | Server actions da comanda (sem página própria — a UI é o `ComandaDialog`, aberto a partir da agenda) |
 | `src/app/admin/(panel)/produtos` | Cadastro de produtos, estoque, comissão por item e categorias |
-| `src/app/admin/(panel)/configuracoes` | Perfil público da barbearia, horários, mensagens e recepção |
+| `src/app/admin/(panel)/configuracoes` | Perfil, link público, horários, dias especiais, mensagens e recepção (sem integrações externas) |
 | `src/app/admin/(panel)/primeiros-passos` | Redireciona para o guia interativo (`/admin?guia=1`) |
-| `src/app/admin/(panel)/minha-conta` | Tela do barbeiro para ver a própria grade e trocar a senha |
+| `src/app/admin/(panel)/minha-conta` | Tela do barbeiro/recepção para ver a própria grade e trocar a senha |
 | `src/lib/onboarding.ts` | Passos e fases do tour completo do painel |
 | `src/components/admin/onboarding-tour.tsx` | Modal + balões didáticos nas telas reais |
+| `src/components/admin/sidebar-onboarding-link.tsx` | Atalho **Continuar guia** na sidebar (quando o tour está pausado) |
 | `src/app/api/agenda/session` | `GET` sessão atual / `POST` entrar com WhatsApp / `DELETE` sair |
-| `src/app/api/v1/customers/me` | Perfil do cliente autenticado (`GET` / `PATCH` — Minha conta no site) |
+| `src/app/api/v1/customers/me` | Perfil do cliente autenticado (`GET` / `PATCH` — Conta no site) |
 | `src/lib/client-api-session.ts` | Cookie assinado da sessão do cliente no `/agenda` |
+| `src/lib/api-auth.ts` / `protected-api-auth.ts` / `api-scopes.ts` | Auth e escopos internos das rotas `/api/v1` |
 | `src/components/ui` | Componentes visuais (shadcn/ui) |
 | `src/components/admin` | Componentes do painel (sidebar, formulários, cards) |
-| `src/components/booking` | Página pública de agendamento do cliente |
+| `src/components/booking` | Site público: fluxo de agendamento, Horários, Conta, Local; sessão compartilhada entre abas |
+| `src/components/booking/client-session-context.tsx` | Estado da sessão WhatsApp compartilhado entre Agendar / Horários / Conta |
 | `src/hooks` | Hooks compartilhados (ex.: `use-mobile`, usado pela sidebar) |
 | `src/lib/supabase` | Conexões com o Supabase (server e admin) |
 | `src/lib/api` | Guards de autenticação/rate limit das rotas REST (`with-api-guard.ts`, `safe-route.ts`) |
@@ -47,7 +50,7 @@ Atualizado conforme o sistema evolui (última revisão: jul/2026).
 | `src/lib/login-path.ts` | Caminho do login da barbearia (`/login-admin`) e URLs de erro |
 | `src/lib/platform-login-path.ts` | Caminho do login da plataforma (`/plataforma/login`) |
 | `supabase/migrations` | Histórico de mudanças do banco (SQL) |
-| `scripts` | Ferramentas: `db:migrate`, `create-admin`, `create-platform-admin`, etc. |
+| `scripts` | Ferramentas: `db:migrate`, `create-platform-admin` (preferido), `create-admin` (legado), etc. |
 | `src/lib/catalog-booking.ts` | Labels de dias e helper legado de faixa de preço por nome |
 | `src/lib/public-service-prices.ts` | Exibição de preços no site do cliente (faixa antes da data, valor exato depois) |
 | `src/lib/service-booking-stats.ts` | Contagem de agendamentos por serviço (catálogo público) |
@@ -89,13 +92,14 @@ Regras importantes no banco:
 
 - O **primeiro usuário** criado vira `owner`; os demais, `barber`
 - O banco **impede dois agendamentos confirmados no mesmo horário** do mesmo profissional
-- Visitantes (sem login) só leem o catálogo; agendamentos exigem login ou passam pela API do sistema
+- Visitantes (sem login) só leem o catálogo público da loja (`?shop={slug}`); criar/alterar agendamento exige sessão do cliente (WhatsApp) ou sessão do painel
 
 ## Papéis e permissões
 
-- **Dono (`owner`)**: vê e gerencia tudo (profissionais, serviços, horários, agendamentos). Em **Configurações → Recepção** cria logins de recepção
-- **Recepção (`reception`)**: vê a agenda de **todos** os barbeiros, marca/edita/cancela horários, abre/edita comandas e **venda rápida** (sem **finalizar** comanda); cadastra e edita **clientes** (vê saldo e histórico de crédito, sem adicionar/remover); **não** acessa comissões, faturamento, produtos, profissionais nem configurações. Em **Minha conta** só troca a senha
-- **Barbeiro (`barber`)**: entra com e-mail/senha criados pelo dono; vê a própria agenda e **Minhas comissões** (`/admin/financeiro/comissoes`) — só os dados dele, sem ver outros barbeiros nem o financeiro geral. Em **Minha conta** (`/admin/minha-conta`) consulta a grade e altera a senha. Páginas só do dono redirecionam para a agenda ou para Minha conta (`/admin/configuracoes` → Minha conta)
+- **Dono (`owner`)**: vê e gerencia tudo (profissionais, serviços, horários, agendamentos, clientes, financeiro). Em **Configurações → Recepção** cria logins de recepção. No primeiro acesso, vê o **guia interativo** do painel
+- **Recepção (`reception`)**: vê a agenda de **todos** os barbeiros, marca/edita/cancela horários, abre/edita comandas e **venda rápida** (sem **finalizar** comanda); cadastra e edita **clientes** (vê saldo e histórico de crédito, sem adicionar/remover); **não** acessa comissões, faturamento, produtos, profissionais nem configurações. Em **Minha conta** só troca a senha. A recepção **não** autentica nas rotas REST `/api/v1` (só server actions do painel)
+- **Barbeiro (`barber`)**: entra com e-mail/senha criados pelo dono; vê a própria agenda e **Minhas comissões** (`/admin/financeiro/comissoes`) — só os dados dele, sem ver outros barbeiros nem o financeiro geral. Em **Minha conta** (`/admin/minha-conta`) consulta a grade e altera a senha. Páginas só do dono redirecionam para a agenda ou para Minha conta
+- Menu **Dia a dia** (dono): Agenda → Comissões → Caixas → Financeiro
 - O painel admin (`/admin`) usa `noindex` para não aparecer em buscadores
 
 ## Profissionais
@@ -162,68 +166,98 @@ Somente o **dono** edita horários; o barbeiro vê a própria grade em modo leit
 - O **intervalo da agenda** (de quantos em quantos minutos os horários aparecem) é configurável em **Configurações**: 15, 30, 45 ou 60 min (`shops.slot_step_minutes`, padrão 15)
 - Pra hoje, só oferece horários com 10 min de antecedência; agenda aberta até **60 dias** à frente
 - Fuso fixo da barbearia: `America/Sao_Paulo`
-- Exposto em `GET /api/v1/appointments/availability?professionalId=...&date=AAAA-MM-DD&serviceIds=id1,id2` (público — usado pelo site `/agenda` e pelo painel)
+- Exposto em `GET /api/v1/appointments/availability?shop={slug}&professionalId=...&date=AAAA-MM-DD&serviceIds=id1,id2` (público — usado pelo site `/agenda` e pelo painel)
 
-## Página do cliente (`/agenda`)
+## Página do cliente (`/agenda/{slug}`)
 
-- Layout mobile: tela cheia, conteúdo limpo (sem barra de marca no topo) e menu inferior **Agendar · Horários · Local**
+- Layout mobile: tela cheia e menu inferior **Agendar · Horários · Conta · Local**
 - Aba **Local**: perfil da loja, funcionamento, endereço, contatos e botão **Como chegar**
-- A **prévia do link no WhatsApp** (Open Graph) usa nome, bio curta e logo de `shops`, com imagem gerada em `/agenda/opengraph-image` (1200×630). Se a prévia ficar desatualizada após um deploy, force a atualização no [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/)
-- Passos: barbeiro (**ou sem preferência**) → serviços → data/horário → **WhatsApp** (fica logado ~14 dias) → se for novo, nome e **sobrenome** (obrigatório) → confirmação
+- Aba **Conta**: perfil do cliente (nome, foto, crédito na loja) após informar o WhatsApp
+- A **prévia do link no WhatsApp** (Open Graph) usa nome, bio curta e logo de `shops`, com imagem gerada em `/agenda/[slug]/opengraph-image` (1200×630). Se a prévia ficar desatualizada após um deploy, force a atualização no [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/)
+- Passos em **Agendar**: barbeiro (**ou sem preferência**) → serviços → data/horário → **WhatsApp** → se for novo, nome e **sobrenome** (obrigatório) → confirmação
+- **Sessão única:** ao informar o WhatsApp em Agendar, Horários ou Conta, o cliente fica logado nas três abas (~14 dias). Só pede o número de novo se sair (“Não sou eu” / Sair)
 - **Sem preferência:** o site mostra a união dos horários livres de quem faz os serviços; na hora de confirmar, o servidor escolhe o barbeiro **com menos agendamentos ativos naquele dia** (empate: ordem do apelido)
 - **Preços na escolha de serviços:** como o dia ainda não foi escolhido, cada serviço mostra a **faixa de preço** (ex.: `Seg–Qua R$ 60,00 · Qui–Sáb R$ 70,00` ou `R$ 60,00 – R$ 70,00`). O total aparece como **“a partir de …”** quando há variação por dia
 - **Serviços mais agendados:** no topo da lista aparece a seção **“Mais agendados”** (até 5 serviços com histórico de marcações); o restante fica em **“Outros serviços”**, ordenado pela mesma contagem
 - **Preços após escolher a data:** na etapa de data/horário e na confirmação, o total passa a usar o **valor exato** do dia selecionado (mesma regra da API ao gravar)
-- Aba **Horários** (Meus horários): mesma sessão pelo WhatsApp; vê agendamentos futuros, pode **remarcar**, **cancelar** ou **Sair**
+- Aba **Horários**: vê futuros e histórico; pode **remarcar**, **cancelar** ou **Sair**
 - Se o número já existir e não for a pessoa, o cliente troca o WhatsApp (não edita o nome de outro cadastro)
-- Usa a mesma regra de horários livres da API (`GET /api/v1/appointments/availability`)
-- Confirmação via `POST /api/v1/appointments` com cookie de sessão (WhatsApp informado no site)
-- O dono edita o perfil público em **Configurações** (`/admin/configuracoes`)
-- Campos do perfil em `shops`: `name`, `bio`, `cep`, `street`, `address_number`, `address_complement`, `neighborhood`, `city`, `state`, `address` (texto montado automaticamente), `whatsapp`, `instagram`, `logo_url`
+- Usa a mesma regra de horários livres da API (`GET /api/v1/appointments/availability?shop=…`)
+- Confirmação via `POST /api/v1/appointments` com cookie de sessão
+- O dono edita o perfil público em **Configurações** (`/admin/configuracoes`) — abas: Perfil, Link, Horários, Dias especiais, Mensagens, Recepção
+- Campos do perfil em `shops`: `name`, `bio`, `cep`, `street`, `address_number`, `address_complement`, `neighborhood`, `city`, `state`, `address` (texto montado automaticamente), `whatsapp`, `instagram`, `logo_url`, `slug`
 - Endereço: digite o CEP e o sistema preenche rua, bairro e cidade (ViaCEP); você informa número e complemento
 
 ## API interna do produto (`/api/v1`)
 
-Rotas usadas pelo site `/agenda` e pelo painel. **Não há chaves de API** nem acesso externo para barbearias. Comandas, caixa e comissões ficam **só no painel**.
+Rotas usadas pelo site `/agenda` e pelo painel. **Não há chaves de API**, OpenAPI público, OTP nem acesso externo para barbearias. Comandas, caixa e comissões ficam **só no painel**.
 
 **Documentação auxiliar:**
-- Sessão do cliente: `POST /api/agenda/session` com WhatsApp + slug da loja
+- Índice: [api/README.md](./api/README.md)
 - Regras de comandas/caixa/comissões: [api/financeiro.md](./api/financeiro.md)
+
+### Loja na URL
+
+Rotas públicas (e as privadas do cliente) resolvem a loja pelo slug:
+
+- Query: `?shop={slug}` (ex.: `?shop=minha-barbearia`)
+- Corpo JSON (sessão): `{ "shop": "minha-barbearia", "whatsapp": "…" }`
+
+### Sessão do cliente
+
+| Método | Rota | Função |
+| --- | --- | --- |
+| GET | `/api/agenda/session?shop={slug}` | Status da sessão (autenticado + WhatsApp) |
+| POST | `/api/agenda/session` | Entrar: body `{ whatsapp, shop }` → cookie `agenda_client_session` (~14 dias) |
+| DELETE | `/api/agenda/session` | Sair (limpa o cookie) |
+
+### Rotas `/api/v1`
 
 | Método | Rota | Auth | Função |
 | --- | --- | --- | --- |
-| GET | `/api/v1/shop` | Pública | Dados da loja (nome, contato, logo, fuso, slots, horários) |
-| GET | `/api/v1/services` | Pública | Lista **serviços** (preços agrupados + quem realiza); opcional `?professionalId=` e `?date=` |
-| GET | `/api/v1/professionals` | Pública | Lista **profissionais** ativos (dados do barbeiro + `serviceIds`); opcional `?serviceId=` |
-| GET | `/api/v1/appointments/availability` | Pública | Horários livres (`professionalId` ou `anyProfessional=1`) |
-| GET | `/api/v1/customers?whatsapp=` | **Privada** | Buscar cliente (`id`, nome, sobrenome, WhatsApp) — dono ou sessão do mesmo número |
-| GET | `/api/v1/customers/me` | **Privada** | Perfil do cliente autenticado |
-| PATCH | `/api/v1/customers/me` | **Privada** | Editar nome/sobrenome do próprio cadastro (WhatsApp imutável) |
-| GET | `/api/v1/appointments?whatsapp=` | **Privada** | Listar agendamentos (`mode=upcoming` padrão, `history` ou `all`) |
-| GET | `/api/v1/appointments/last-completed?whatsapp=` | **Privada** | Último atendimento concluído do cliente |
-| POST | `/api/v1/appointments` | **Privada** | Criar agendamento online (cookie da sessão) |
-| PUT | `/api/v1/appointments/:id/status` | **Privada** | Atualizar status (`scheduled` / `confirmed` / `cancelled` / `done`) |
-| PATCH | `/api/v1/appointments/:id` | **Privada** | Remarcar agendamento |
-| DELETE | `/api/v1/appointments/:id?whatsapp=` | **Privada** | Cancelar agendamento |
+| GET | `/api/v1/shop?shop=` | Pública | Dados da loja (nome, contato, logo, fuso, slots, horários) |
+| GET | `/api/v1/services?shop=` | Pública | Lista **serviços** (preços agrupados + quem realiza); opcional `professionalId`, `date` |
+| GET | `/api/v1/professionals?shop=` | Pública | Lista **profissionais** ativos; opcional `serviceId` |
+| GET | `/api/v1/appointments/availability?shop=` | Pública | Horários livres (`professionalId` ou `anyProfessional=1`) |
+| GET | `/api/v1/customers?whatsapp=&shop=` | **Privada** | Buscar cliente — dono/barbeiro do painel ou sessão do mesmo número |
+| GET | `/api/v1/customers/me?shop=` | **Privada** | Perfil do cliente autenticado |
+| PATCH | `/api/v1/customers/me?shop=` | **Privada** | Editar nome/sobrenome (WhatsApp imutável) |
+| GET | `/api/v1/appointments?whatsapp=&shop=` | **Privada** | Listar (`mode=upcoming` padrão, `history` ou `all`) |
+| GET | `/api/v1/appointments/last-completed?whatsapp=&shop=` | **Privada** | Último atendimento concluído |
+| POST | `/api/v1/appointments` | **Privada** | Criar agendamento online |
+| PUT | `/api/v1/appointments/:id/status` | **Privada** | Status (`scheduled` / `confirmed` / `cancelled` / `done`) |
+| PATCH | `/api/v1/appointments/:id` | **Privada** | Remarcar |
+| DELETE | `/api/v1/appointments/:id?whatsapp=` | **Privada** | Cancelar |
 
-WhatsApp em todas as rotas que usam número: aceita DDD + número (10 ou 11 dígitos), com ou sem `55`, máscara ou `+55`; grava normalizado com `55`.
+WhatsApp: aceita DDD + número (10 ou 11 dígitos), com ou sem `55`, máscara ou `+55`; grava normalizado com `55`.
 
-**Autenticação:** rotas **privadas** exigem sessão admin do painel ou cookie de cliente (`POST /api/agenda/session` com WhatsApp). Rotas **públicas** (loja, catálogo, disponibilidade) funcionam sem header.
+### Autenticação das rotas privadas
 
-Limite de uso por IP (resposta **429** se exceder; lógica em `src/lib/rate-limit.ts`):
+Ordem em `resolveProtectedApiAuth` (`src/lib/protected-api-auth.ts`):
+
+1. Header `Authorization: Bearer <token>` — mesmo token HMAC da sessão do cliente (`CLIENT_SESSION_SECRET`)
+2. Cookie `agenda_client_session` — mesma regra
+3. Sessão Supabase do painel (`owner` ou `barber` da loja ativa)
+4. Recepção **não** autentica na REST; sem API keys
+
+Escopos internos (`src/lib/api-scopes.ts`): `catalog:read`, `availability:read`, `customers:read|update`, `appointments:read|create|update|cancel`.  
+Dono: todos. Barbeiro: só `catalog:read` e `availability:read`. Cliente: escopos de cliente.
+
+### Rate limit (resposta **429**; `src/lib/rate-limit.ts`)
 
 | Rotas | Limite |
 | --- | --- |
 | `shop` / `services` / `professionals` / `availability` | 60 a cada 15 min |
 | `customers` / `customers/me` e `appointments?whatsapp=` | 60 a cada 15 min |
+| `POST /api/agenda/session` | 30 por IP / 15 min e 20 por WhatsApp+loja / 15 min |
 | `POST /appointments` | 5 por IP / hora e 3 por WhatsApp / hora |
 | `PATCH` / `DELETE /appointments/:id` | 10 a cada 15 min |
 
 ## Clientes
 
-- Cadastro automático na primeira reserva (página ou painel); um WhatsApp = um cliente (por loja)
+- Cadastro automático na primeira reserva (página ou painel); um WhatsApp = um cliente **por loja**
 - No painel, ao agendar: busca e cadastro ficam **na mesma tela** — o WhatsApp busca o cadastro existente e **não altera o nome**; para corrigir dados, use **Clientes**
-- Somente o **dono** vê **Clientes** (`/admin/clientes`): busca, cadastro manual em **Novo cliente**, ficha com histórico
+- **Dono e recepção** veem **Clientes** (`/admin/clientes`): busca, cadastro manual em **Novo cliente**, ficha com histórico
 - Na ficha do cliente: editar dados e ver histórico de visitas (data, barbeiro, serviços, status)
 - Alterar nome/WhatsApp no painel atualiza também os agendamentos vinculados
 - Exclusão só é permitida se o cliente não tiver visitas concluídas (`done`) nem horários ativos (`scheduled`/`confirmed`); agendamentos cancelados não impedem
@@ -249,12 +283,30 @@ Limite de uso por IP (resposta **429** se exceder; lógica em `src/lib/rate-limi
 - Comanda (`comanda-service.ts`): produto/serviço/profissional/agendamento informados nos itens são sempre revalidados contra o `shop_id` da própria comanda (`loadProductsForComandaItems`, `validateProductStockForClose`, `loadServiceDurationsForSync`, `resolveMainForComandaItem`) — evita que um `id` de outra loja entre na comanda
 - Edição de agendamento (`getEditAvailabilitySlots`): confirma que o profissional pertence à loja da sessão antes de calcular horários livres
 
+## Guia do dono (onboarding)
+
+- Coluna `shops.onboarding_completed_at`: se `null`, o dono vê o tour
+- Tour: `src/lib/onboarding.ts` + `onboarding-tour.tsx` — modal inicial + balões nas telas reais
+- **X** no balão: pausa; retoma pela sidebar (**Continuar guia**)
+- **Encerrar guia** / fim do tour: mensagem final e marca como concluído (não retoma)
+- URL `/admin?guia=1` ou menu **Guia inicial** reabre o resumo enquanto não estiver concluído
+- `/admin/primeiros-passos` redireciona para `/admin?guia=1`
+
+## O que foi removido do produto
+
+Não fazem mais parte do sistema (não recriar docs/UI):
+
+- Chaves de API / tela de Integrações / OpenAPI público (`/docs/api`)
+- OTP WhatsApp, webhooks n8n, app mobile, lembretes push
+- Origem de agendamento `ai` / “Dinho”
+- Tabela `shop_settings` (dados migrados para `shops`)
+
 ## Riscos de segurança conhecidos (aceitos por ora)
 
 Identificados em auditoria (jul/2026); decisão consciente de não corrigir agora — revisar quando fizer sentido:
 
-- **`GET /api/v1/customers`**: privada (dono ou sessão do mesmo WhatsApp). Site usa `GET` / `PATCH /customers/me` após informar o WhatsApp.
-- Sessão do cliente no site: informar WhatsApp em `POST /api/agenda/session` (cookie ~14 dias)
+- **`GET /api/v1/customers`**: privada (dono/barbeiro ou sessão do mesmo WhatsApp). Site usa `GET` / `PATCH /customers/me` após informar o WhatsApp.
+- Sessão do cliente no site: quem souber o WhatsApp pode iniciar sessão em `POST /api/agenda/session` (cookie ~14 dias) — sem OTP de propósito
 
 ## Como atualizar o banco
 
@@ -268,5 +320,7 @@ Scripts auxiliares (com `.env.local` apontando para o banco certo):
 
 | Comando | Quando usar |
 | --- | --- |
-| `npm run db:migrate-weekday-prices` | Após migration `0030`: converte serviços legados (nomes AppBarber) para preço por dia |
+| `npm run create-platform-admin` | Criar superadmin da plataforma |
+| `npm run db:migrate-weekday-prices` | Após migration `0030`: converte serviços legados para preço por dia |
 | `npm run db:reset-shop` | Zera agendamentos, clientes, serviços, comandas e caixa; **mantém** logins e profissionais |
+| `npm run create-admin` | **Legado** (single-shop); preferir cadastrar o dono pela plataforma |

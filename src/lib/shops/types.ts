@@ -22,7 +22,7 @@ export type PlatformShop = {
   createdAt: string;
   /** Mensalidade cobrada pela plataforma (centavos). Null = ainda não configurada. */
   monthlyFeeCents: number | null;
-  /** Dia do mês de vencimento (1–28). Null = ainda não configurado. */
+  /** Dia do mês de vencimento (1–31). Null = ainda não configurado. */
   billingDueDay: number | null;
   /** Último login do dono no painel (auth.users.last_sign_in_at). */
   ownerLastSignInAt: string | null;

@@ -17,7 +17,7 @@ Comandas, caixa e comissões vivem **só no painel admin** (não há rotas `/api
 | Gorjeta | Opcional ao fechar; o barbeiro escolhido recebe **100%** (entra no total e no caixa) |
 | Crédito do cliente | Saldo por cliente; pode pagar comanda com crédito da loja; troco ou depósito vira crédito e **entra no caixa** pelo método de origem (Pix, dinheiro etc.) |
 | Uso de crédito | Pagamento com crédito da loja **não** entra no caixa (dinheiro já entrou antes), mas **gera comissão** normalmente |
-| Quem fecha | **Dono** no painel; barbeiro se tiver permissão |
+| Quem fecha | **Dono** no painel; barbeiro se tiver permissão. Recepção abre/edita comanda, mas **não finaliza** |
 | Taxa de cartão | **Não** entra no cálculo da comissão |
 | Pagamento misto | Várias formas na mesma comanda (ex.: R$ 50 Pix + R$ 50 dinheiro) |
 | Preço editável | Cada linha da comanda guarda o preço cobrado (não altera a tabela de serviços) |
@@ -37,22 +37,25 @@ No painel **Financeiro**, **Entradas no caixa** soma pagamentos reais + depósit
 
 O painel **Financeiro** (`/admin/financeiro`, só dono) abre em **visão geral enxuta** (período + faturamento, comissões, serviços, ticket médio + evolução das entradas) e permite **abrir o detalhe de cada métrica** (`?metric=faturamento|caixa|ticket|servicos|comissoes`): dia a dia, dia da semana, ranking e por barbeiro conforme a métrica.
 
-No menu lateral, a ordem é: Agenda → Caixas → Comissões → Financeiro.
+No menu lateral (**Dia a dia**), a ordem é: **Agenda → Comissões → Caixas → Financeiro**.
 
 ---
 
 ## Painel admin (financeiro)
 
-Somente o **dono** vê as rotas abaixo (menu **Dia a dia** na sidebar). O barbeiro vê **Minhas comissões**.
+Somente o **dono** vê as rotas abaixo (menu **Dia a dia** na sidebar), exceto **Minhas comissões** (barbeiro).
 
 | Rota | Função |
 | --- | --- |
 | `/admin` (aba **CAIXA**) | Operar o caixa do dia na agenda: **saldo em destaque**, entradas/comissões/barbearia, barras por forma de pagamento, lista de comandas fechadas, abrir/encerrar caixa e link para métricas |
 | `/admin/financeiro` | Dashboard de métricas por período: KPIs, evolução diária, pagamentos e barbeiros (comparação com período anterior) |
 | `/admin/financeiro/caixas` | Histórico de sessões de caixa: filtro por período, busca, abrir/fechar/reabrir, links para agenda e comissões |
+| `/admin/financeiro/caixas/[date]` | Detalhe do caixa de um dia |
 | `/admin/financeiro/comissoes` | Comissões por barbeiro no período (dia do atendimento/caixa). Ao **detalhar** um barbeiro: resumo com **faturamento**, **comissão** e **serviços**, **dia a dia**, ranking de serviços, lista de **atendimentos** e formas de pagamento. Produtos sem profissional **não** entram no repasse |
+| `/admin/produtos/vendas` | Relatório de vendas de produtos (dono) |
 
 - **Agenda:** clique no horário → modal de comanda (fechar, reabrir, pagamento misto; produto com opção **Sem profissional**)
 - **Profissionais:** campo **% de comissão** no cadastro de cada barbeiro
+- **Venda rápida:** atalho na agenda para vender produto sem horário
 
 Relatórios do painel filtram comandas fechadas pelo **dia do atendimento / dia do caixa**, não pelo horário em que a comanda foi fechada.

@@ -54,6 +54,16 @@ function parseDayLocal(isoDate: string): { year: number; month: number; day: num
   return { year: y, month: m, day: d };
 }
 
+/** Dia real de vencimento no mês (1–12): se o dia não existir, usa o último dia. */
+export function effectiveDueDay(
+  year: number,
+  month: number,
+  dueDay: number
+): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return Math.min(Math.max(1, dueDay), daysInMonth);
+}
+
 /**
  * Calcula o status de cobrança de um cliente na data de referência `today`.
  * `paymentsByMonth` é um mapa "YYYY-MM-01" -> total pago naquele mês (em centavos).
@@ -66,7 +76,7 @@ export function computeShopBillingStatus(
   const fee = shop.monthlyFeeCents;
   const dueDay = shop.billingDueDay;
 
-  if (fee == null || fee <= 0 || dueDay == null || dueDay < 1 || dueDay > 28) {
+  if (fee == null || fee <= 0 || dueDay == null || dueDay < 1 || dueDay > 31) {
     return {
       kind: "unconfigured",
       overdueMonths: 0,
@@ -104,8 +114,14 @@ export function computeShopBillingStatus(
     if (monthPaid(cursor)) break;
 
     if (cursor === currentKey) {
-      // Mês atual só conta como atraso se já passou o dia de vencimento.
-      if (todayDay > dueDay) {
+      // Mês atual só conta como atraso se já passou o dia de vencimento
+      // (em fev. etc., dia 31 vira o último dia do mês).
+      const dueThisMonth = effectiveDueDay(
+        today.getFullYear(),
+        today.getMonth() + 1,
+        dueDay
+      );
+      if (todayDay > dueThisMonth) {
         overdueMonths += 1;
       }
     } else {

@@ -24,7 +24,7 @@ function parsePositiveCents(raw: unknown): number | null {
 
 function parseDueDay(raw: unknown): number | null {
   const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 28) {
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 31) {
     return null;
   }
   return n;
@@ -78,7 +78,7 @@ export async function saveShopBilling(input: {
 
   const dueDay = parseDueDay(input.billingDueDay);
   if (dueDay == null) {
-    return { ok: false, error: "O dia de vencimento precisa ser entre 1 e 28." };
+    return { ok: false, error: "O dia de vencimento precisa ser entre 1 e 31." };
   }
 
   const { data: existing, error: loadError } = await admin

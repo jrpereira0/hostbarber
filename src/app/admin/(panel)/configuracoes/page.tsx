@@ -90,7 +90,7 @@ export default async function SettingsPage({ searchParams }: PageProps) {
         <PageHeader
           tone="dark"
           title="Configurações"
-          description="Perfil, horários, dias especiais, recepção, mensagens e integrações da barbearia."
+          description="Perfil, link, horários, dias especiais, mensagens e recepção da barbearia."
         />
 
         <Suspense fallback={null}>

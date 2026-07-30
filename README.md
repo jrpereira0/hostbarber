@@ -31,7 +31,7 @@ npm run create-platform-admin -- seu@email.com senha123 "Seu Nome"
 
 Acesse [http://localhost:3000/plataforma/login](http://localhost:3000/plataforma/login), cadastre um cliente (loja) e use o e-mail/senha do dono em `/login-admin`.
 
-No primeiro acesso, o dono vê um **tour completo** do painel (modal + balões): todas as abas de Configurações, profissionais, serviços, produtos, clientes, agenda, caixa e financeiro.
+No primeiro acesso, o dono vê um **tour completo** do painel (modal + balões): todas as abas de Configurações, profissionais, serviços, produtos, clientes, agenda, caixa e financeiro. Pode pausar com o **X** e retomar pela sidebar (**Continuar guia**).
 
 O site público da loja fica em `/agenda/{slug}` (ex.: `/agenda/minha-barbearia`). A rota `/agenda` redireciona para a loja padrão (primeira ativa).
 
@@ -55,7 +55,7 @@ Opcionais:
 | `NEXT_PUBLIC_SITE_URL` | URL pública (Open Graph). Se omitir na Vercel, usa `VERCEL_URL` |
 | `DATABASE_URL` | Rodar `npm run db:migrate` (só localmente) |
 
-Não há chaves de API para barbearias: o site e o painel usam sessão (login do painel / WhatsApp do cliente no site).
+Não há chaves de API para barbearias: o site e o painel usam sessão (login do painel / WhatsApp do cliente no site). As rotas públicas de catálogo pedem a loja em `?shop={slug}`.
 
 Marque **Production**, **Preview** e **Development**.
 
@@ -67,11 +67,13 @@ O projeto usa `vercel.json` com região **`gru1` (São Paulo)**, alinhada ao Sup
 
 ```bash
 npm run dev                    # localhost:3000
+npm run build                  # build de produção
+npm run start                  # sobe o build
 npm run db:migrate             # migrations pendentes
 npm run db:migrate-weekday-prices
 npm run db:reset-shop          # zera dados operacionais; mantém login e profissionais
-npm run create-admin           # dono/barbeiro: -- email senha "Nome"
 npm run create-platform-admin  # superadmin: -- email senha "Nome"
+npm run create-admin           # legado (single-shop); preferir cadastro pela plataforma
 npm run lint
 npm run typecheck
 npm run test
@@ -79,5 +81,6 @@ npm run test
 
 ## Documentação
 
-- [docs/ARQUITETURA.md](docs/ARQUITETURA.md) — organização, tabelas e permissões
+- [docs/ARQUITETURA.md](docs/ARQUITETURA.md) — pastas, tabelas, permissões, rotas e API interna
+- [docs/api/README.md](docs/api/README.md) — índice da pasta API (sem OpenAPI externo)
 - [docs/api/financeiro.md](docs/api/financeiro.md) — comandas, caixa e comissões
