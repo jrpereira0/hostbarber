@@ -49,15 +49,15 @@ export const TOUR_PHASES: Record<
   },
 };
 
-/** Guia completo pelas telas reais do painel. */
+/** Guia completo pelas telas reais do painel. Textos curtos: o balão não tem scroll. */
 export const TOUR_STEPS: TourStepDef[] = [
   {
     id: "settings-tabs",
     phase: "settings",
     href: "/admin/configuracoes?tab=perfil",
     target: "tour-settings-tabs",
-    title: "As abas de Configurações",
-    body: "Tudo da loja fica nestas abas no topo. Em seguida vamos abrir cada uma: Perfil, Link, Horários, Dias especiais, Mensagens e Recepção.",
+    title: "Abas de Configurações",
+    body: "Tudo da loja fica nestas abas. Vamos passar por cada uma: Perfil, Link, Horários e as demais.",
   },
   {
     id: "profile",
@@ -65,12 +65,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/configuracoes?tab=perfil",
     target: "tour-settings-profile",
     title: "Aba Perfil",
-    body: "Preencha os dados que o cliente vê no site. Salve antes de seguir.",
-    bullets: [
-      "Nome da barbearia e WhatsApp de contato",
-      "Endereço completo (CEP preenche a rua)",
-      "Logo e Instagram, se quiser",
-    ],
+    body: "Nome, WhatsApp, endereço e logo — o que o cliente vê no site. Salve antes de seguir.",
   },
   {
     id: "link",
@@ -78,11 +73,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/configuracoes?tab=link",
     target: "tour-settings-link",
     title: "Aba Link",
-    body: "Este é o link que você envia para o cliente agendar. Pode personalizar o final da URL (slug).",
-    bullets: [
-      "Exemplo: /agenda/minha-barbearia",
-      "Depois de salvar, teste o link em outra aba",
-    ],
+    body: "Link público da agenda (ex.: /agenda/minha-loja). Personalize, salve e teste em outra aba.",
   },
   {
     id: "hours",
@@ -90,12 +81,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/configuracoes?tab=horarios",
     target: "tour-settings-hours",
     title: "Aba Horários",
-    body: "Defina quando a loja abre e o intervalo dos horários na agenda (15, 30, 45 ou 60 min).",
-    bullets: [
-      "Marque os dias abertos e o horário de cada um",
-      "O intervalo define os slots que o cliente vê",
-      "Salve para valer na agenda e no site",
-    ],
+    body: "Dias abertos, horário de cada um e intervalo dos slots (15–60 min). Salve para valer na agenda.",
   },
   {
     id: "exceptions",
@@ -103,11 +89,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/configuracoes?tab=excecoes",
     target: "tour-settings-exceptions",
     title: "Aba Dias especiais",
-    body: "Use para feriados, folgas ou horários diferentes só em uma data. Não é obrigatório agora.",
-    bullets: [
-      "Pode fechar a loja inteira ou só um profissional",
-      "Dá para liberar um horário especial no dia",
-    ],
+    body: "Feriados, folgas ou horário diferente em uma data. Opcional — pode pular.",
     optional: true,
   },
   {
@@ -116,11 +98,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/configuracoes?tab=mensagens",
     target: "tour-settings-messages",
     title: "Aba Mensagens",
-    body: "Texto pronto para confirmar o horário no WhatsApp do cliente. Você pode editar o modelo.",
-    bullets: [
-      "Dá para ligar ou desligar a mensagem",
-      "Use variáveis do sistema no texto, se aparecerem",
-    ],
+    body: "Modelo de confirmação no WhatsApp. Dá para ligar, desligar e editar o texto.",
   },
   {
     id: "reception",
@@ -128,11 +106,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/configuracoes?tab=recepcao",
     target: "tour-settings-reception",
     title: "Aba Recepção",
-    body: "Cadastre quem atende na recepção. Ela vê a agenda toda, mas não o financeiro.",
-    bullets: [
-      "Opcional se só você opera o painel",
-      "Cria login com e-mail e senha para a recepção",
-    ],
+    body: "Login da recepção: vê a agenda, sem financeiro. Opcional se só você usa o painel.",
     optional: true,
   },
   {
@@ -141,11 +115,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/profissionais",
     target: "tour-professionals-page",
     title: "Profissionais",
-    body: "Aqui fica a lista da equipe. Cada barbeiro pode ter login, comissão e horários próprios.",
-    bullets: [
-      "Use “Cadastrar” para adicionar o primeiro",
-      "Depois você edita foto, serviços e permissões",
-    ],
+    body: "Lista da equipe. Use Cadastrar para o primeiro barbeiro (pode ser você).",
   },
   {
     id: "team",
@@ -153,13 +123,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/profissionais/novo",
     target: "tour-professional-form",
     title: "Cadastrar profissional",
-    body: "Pode ser você mesmo. Preencha os dados, o acesso e a grade de atendimento.",
-    bullets: [
-      "Aba Dados: nome, apelido e contato",
-      "Aba Acesso: e-mail, senha e % de comissão",
-      "Aba Serviços: o que ele realiza",
-      "Aba Horário: quando ele atende",
-    ],
+    body: "Preencha Dados, Acesso (e-mail/senha/%), Serviços e Horário nas abas do formulário.",
   },
   {
     id: "services-list",
@@ -167,11 +131,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/servicos",
     target: "tour-services-page",
     title: "Serviços",
-    body: "Catálogo do que a loja oferece. Sem serviço ativo, o cliente não agenda pelo site.",
-    bullets: [
-      "Corte, barba, combo… cada um com duração",
-      "Preço pode variar por dia da semana",
-    ],
+    body: "Catálogo da loja (corte, barba…). Sem serviço ativo, o cliente não agenda pelo site.",
   },
   {
     id: "services",
@@ -179,11 +139,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/servicos/novo",
     target: "tour-service-form",
     title: "Cadastrar serviço",
-    body: "Informe nome, duração e preço. Vincule aos profissionais que fazem esse serviço.",
-    bullets: [
-      "A duração ocupa o tempo na agenda",
-      "Marque os dias em que o serviço é oferecido",
-    ],
+    body: "Nome, duração, preço e quem realiza. A duração ocupa o tempo na agenda.",
   },
   {
     id: "products-list",
@@ -191,11 +147,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/produtos",
     target: "tour-products-page",
     title: "Produtos",
-    body: "Itens vendidos na comanda (pomada, bebida, kit). Se não vende produto, pode pular.",
-    bullets: [
-      "Organize por categorias",
-      "Estoque baixa na venda",
-    ],
+    body: "Itens da comanda (pomada, bebida…). Se não vende produto, pode pular.",
     optional: true,
   },
   {
@@ -204,11 +156,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/produtos/novo",
     target: "tour-product-form",
     title: "Cadastrar produto",
-    body: "Preço, estoque e comissão (se houver barbeiro na venda).",
-    bullets: [
-      "Sem profissional na comanda = sem comissão",
-      "Dá para cadastrar mais depois",
-    ],
+    body: "Preço, estoque e comissão (só se houver barbeiro na venda).",
     optional: true,
   },
   {
@@ -217,11 +165,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/clientes",
     target: "tour-clients-page",
     title: "Clientes",
-    body: "Base de clientes da loja: WhatsApp, histórico e crédito.",
-    bullets: [
-      "Novos clientes também entram ao agendar pelo site",
-      "Crédito da loja pode ser usado no pagamento",
-    ],
+    body: "Base com WhatsApp, histórico e crédito. Novos clientes também entram pelo site.",
   },
   {
     id: "agenda",
@@ -229,12 +173,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin",
     target: "tour-agenda-main",
     title: "Agenda do dia",
-    body: "Centro da operação: horários, encaixes, comandas e status dos atendimentos.",
-    bullets: [
-      "Clique em um horário vazio para marcar",
-      "Clique no card para abrir ações ou a comanda",
-      "Troque o dia no calendário ao lado",
-    ],
+    body: "Horário vazio marca; no card abre ações/comanda. Troque o dia no calendário.",
   },
   {
     id: "cash",
@@ -242,12 +181,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin",
     target: "tour-agenda-cash",
     title: "Caixa do dia",
-    body: "Abra o caixa pela aba lateral “CAIXA”. Sem caixa aberto, a comanda não fecha.",
-    bullets: [
-      "Só um caixa aberto por vez",
-      "Pagamentos reais entram no caixa do dia",
-      "Encerrar no fim do expediente",
-    ],
+    body: "Abra pela aba CAIXA. Sem caixa aberto a comanda não fecha. Encerre no fim do dia.",
   },
   {
     id: "cash-history",
@@ -255,11 +189,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/financeiro/caixas",
     target: "tour-caixas-page",
     title: "Histórico de caixas",
-    body: "Consulta caixas abertos e encerrados por período. Útil para conferência do dia.",
-    bullets: [
-      "Filtre por datas",
-      "Abra o detalhe de um dia específico",
-    ],
+    body: "Caixas abertos e encerrados por período — útil para conferir o dia.",
   },
   {
     id: "finance",
@@ -267,11 +197,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/financeiro",
     target: "tour-finance-page",
     title: "Financeiro",
-    body: "Visão geral: faturamento, entradas no caixa, ticket médio e evolução.",
-    bullets: [
-      "Escolha o período no topo",
-      "Clique em uma métrica para ver o detalhe",
-    ],
+    body: "Faturamento, entradas, ticket médio. Escolha o período e clique numa métrica.",
   },
   {
     id: "commissions",
@@ -280,10 +206,6 @@ export const TOUR_STEPS: TourStepDef[] = [
     target: "tour-commissions-page",
     title: "Comissões",
     body: "Quanto cada profissional tem a receber no período, com detalhe por atendimento.",
-    bullets: [
-      "Baseado no valor cobrado dos serviços",
-      "Produto só entra se tiver barbeiro na venda",
-    ],
   },
 ];
 

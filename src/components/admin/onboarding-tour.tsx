@@ -12,7 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowRight, Check, ListChecks, X } from "lucide-react";
+import { ArrowRight, ListChecks, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -407,39 +407,20 @@ function TourOverlay({
   const phase = TOUR_PHASES[step.phase];
   const local = phaseProgress(step);
 
-  const balloonStyle = useMemo(() => {
-    const gap = 12;
-    const maxH = Math.min(
-      typeof window !== "undefined" ? window.innerHeight * 0.42 : 340,
-      360
-    );
-    const style: CSSProperties = {
-      left: gap,
-      right: gap,
-      width: "auto",
-      maxWidth: 440,
-      maxHeight: maxH,
-      marginLeft: "auto",
-      marginRight: "auto",
-    };
-
-    // Prefere ficar abaixo do destaque; se não couber, cola embaixo da tela.
-    if (rect) {
-      const below = rect.top + rect.height + gap;
-      const spaceBelow = (typeof window !== "undefined" ? window.innerHeight : 800) - below - gap;
-      if (spaceBelow >= 200) {
-        style.top = below;
-        style.bottom = "auto";
-      } else {
-        style.bottom = gap;
-        style.top = "auto";
-      }
-    } else {
-      style.bottom = gap;
-    }
-
-    return style;
-  }, [rect]);
+  // Sempre no rodapé, altura automática — sem scroll interno.
+  const balloonStyle = useMemo(
+    () =>
+      ({
+        left: 12,
+        right: 12,
+        bottom: 12,
+        width: "auto",
+        maxWidth: 420,
+        marginLeft: "auto",
+        marginRight: "auto",
+      }) as CSSProperties,
+    []
+  );
 
   return (
     <div className="fixed inset-0 z-[80]">
@@ -485,18 +466,17 @@ function TourOverlay({
       )}
 
       <div
-        className="absolute z-[81] flex flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#151618] text-[#f5f5f5] shadow-2xl"
+        className="absolute z-[81] overflow-visible rounded-2xl border border-white/15 bg-[#151618] p-3.5 text-[#f5f5f5] shadow-2xl sm:p-4"
         style={balloonStyle}
       >
-        <div className="flex shrink-0 items-start justify-between gap-2 px-4 pt-4 sm:px-5 sm:pt-5">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className={ADMIN_SURFACE.sectionLabel}>
+            <p className={cn("text-[11px] tabular-nums", ADMIN_SURFACE.muted)}>
               {phase.label} · {local.current}/{local.total}
+              <span className="mx-1.5 text-white/20">·</span>
+              Passo {stepNumber}/{stepTotal}
             </p>
-            <p className={cn("mt-1 text-[11px] tabular-nums", ADMIN_SURFACE.muted)}>
-              Passo {stepNumber} de {stepTotal} no tour
-            </p>
-            <h3 className="mt-1.5 text-base font-semibold tracking-tight sm:text-lg">
+            <h3 className="mt-1 text-[15px] font-semibold tracking-tight sm:text-base">
               {step.title}
             </h3>
           </div>
@@ -510,26 +490,13 @@ function TourOverlay({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 [scrollbar-width:thin] sm:px-5">
-          <p className={cn("text-sm leading-relaxed", ADMIN_SURFACE.muted)}>
-            {waiting
-              ? "Abrindo a tela… em instantes o destaque aparece para você editar."
-              : step.body}
-          </p>
+        <p className={cn("mt-2 text-[13px] leading-snug", ADMIN_SURFACE.muted)}>
+          {waiting
+            ? "Abrindo a tela… o destaque aparece em instantes."
+            : step.body}
+        </p>
 
-          {!waiting && step.bullets && step.bullets.length > 0 ? (
-            <ul className="mt-3 space-y-1.5">
-              {step.bullets.map((item) => (
-                <li key={item} className="flex gap-2 text-sm leading-snug">
-                  <Check className="mt-0.5 size-3.5 shrink-0 text-[#ecf15e]" />
-                  <span className="text-[#c8c9cd]">{item}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-
-        <div className="shrink-0 border-t border-white/10 px-4 pt-3 pb-4 sm:px-5 sm:pb-5">
+        <div className="mt-3 flex flex-col gap-1.5 border-t border-white/10 pt-3">
           <div className="flex gap-2">
             <Button
               type="button"
@@ -549,24 +516,25 @@ function TourOverlay({
               <ArrowRight className="size-4" />
             </Button>
           </div>
-          {step.optional ? (
-            <Button
+          <div className="flex items-center justify-center gap-3">
+            {step.optional ? (
+              <button
+                type="button"
+                className="text-[11px] text-[#b4b6bb] underline-offset-2 hover:underline"
+                onClick={onNext}
+              >
+                Pular passo
+              </button>
+            ) : null}
+            <button
               type="button"
-              variant="ghost"
-              className="mt-2 w-full text-xs text-[#b4b6bb] hover:bg-white/5 hover:text-[#f5f5f5]"
-              onClick={onNext}
+              className="text-[11px] text-[#8b8d93] underline-offset-2 hover:underline"
+              disabled={pending}
+              onClick={onSkip}
             >
-              Pular este passo
-            </Button>
-          ) : null}
-          <button
-            type="button"
-            className="mt-2 w-full text-center text-[11px] text-[#8b8d93] underline-offset-2 hover:underline"
-            disabled={pending}
-            onClick={onSkip}
-          >
-            Encerrar guia
-          </button>
+              Encerrar guia
+            </button>
+          </div>
         </div>
       </div>
     </div>
