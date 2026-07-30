@@ -8,6 +8,7 @@ import {
 } from "@/lib/shops/types";
 import {
   computeShopBillingStatus,
+  normalizePaymentKind,
   sumPaymentsByShopMonth,
   type BillingShopRow,
   type PlatformPaymentRow,
@@ -47,7 +48,7 @@ export default async function PlatformShopBillingPage({ params }: PageProps) {
     admin
       .from("platform_payments")
       .select(
-        "id, shop_id, amount_cents, reference_month, paid_at, note, created_at"
+        "id, shop_id, amount_cents, reference_month, paid_at, note, kind, created_at"
       )
       .eq("shop_id", shopId)
       .order("paid_at", { ascending: false })
@@ -66,6 +67,7 @@ export default async function PlatformShopBillingPage({ params }: PageProps) {
     referenceMonth: String(row.reference_month).slice(0, 10),
     paidAt: String(row.paid_at).slice(0, 10),
     note: row.note,
+    kind: normalizePaymentKind(row.kind),
     createdAt: row.created_at,
   }));
 
@@ -107,10 +109,9 @@ export default async function PlatformShopBillingPage({ params }: PageProps) {
     lastPaymentCents: last?.amountCents ?? null,
   };
 
-  const totalReceivedCents = payments.reduce(
-    (sum, p) => sum + p.amountCents,
-    0
-  );
+  const totalReceivedCents = payments
+    .filter((p) => p.kind === "payment")
+    .reduce((sum, p) => sum + p.amountCents, 0);
 
   return (
     <div className="flex w-full flex-col gap-6">

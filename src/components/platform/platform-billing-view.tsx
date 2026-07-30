@@ -43,6 +43,7 @@ import {
   billingStatusLabel,
   formatBillingMonthLabel,
   monthKey,
+  paymentKindLabel,
   type BillingShopRow,
   type BillingStatusKind,
   type PlatformPaymentRow,
@@ -199,7 +200,8 @@ export function PlatformBillingView({
     return payments.filter(
       (p) =>
         matchesSearch(p.shopName, paymentQuery) ||
-        matchesSearch(p.note ?? "", paymentQuery)
+        matchesSearch(p.note ?? "", paymentQuery) ||
+        matchesSearch(paymentKindLabel(p.kind), paymentQuery)
     );
   }, [payments, paymentQuery]);
 
@@ -510,9 +512,10 @@ export function PlatformBillingView({
                 </p>
               ) : (
                 <div className="overflow-hidden rounded-xl border border-white/10 bg-[#151618]">
-                  <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.9fr)_minmax(0,1.2fr)_52px] gap-3 border-b border-white/10 px-4 py-2.5 text-[11px] font-medium tracking-wide text-[#8b8d93] uppercase md:grid">
+                  <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.75fr)_minmax(0,0.85fr)_minmax(0,1fr)_52px] gap-3 border-b border-white/10 px-4 py-2.5 text-[11px] font-medium tracking-wide text-[#8b8d93] uppercase md:grid">
                     <span>Data</span>
                     <span>Cliente</span>
+                    <span>Tipo</span>
                     <span>Valor</span>
                     <span>Referência</span>
                     <span>Observação</span>
@@ -522,7 +525,7 @@ export function PlatformBillingView({
                     {filteredPayments.map((payment) => (
                       <li
                         key={payment.id}
-                        className="grid grid-cols-1 gap-2 px-4 py-3.5 transition-colors hover:bg-white/[0.02] md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.9fr)_minmax(0,1.2fr)_52px] md:items-center md:gap-3"
+                        className="grid grid-cols-1 gap-2 px-4 py-3.5 transition-colors hover:bg-white/[0.02] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.75fr)_minmax(0,0.85fr)_minmax(0,1fr)_52px] md:items-center md:gap-3"
                       >
                         <div className="text-sm tabular-nums text-[#f5f5f5]">
                           {formatDateBR(payment.paidAt)}
@@ -535,7 +538,26 @@ export function PlatformBillingView({
                             {payment.shopName}
                           </Link>
                         </div>
-                        <div className="text-sm font-medium tabular-nums text-[#ecf15e]">
+                        <div>
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+                              payment.kind === "payment"
+                                ? "border-white/10 bg-white/5 text-[#f5f5f5]"
+                                : "border-[rgb(236_241_94_/_25%)] bg-[rgb(236_241_94_/_10%)] text-[#ecf15e]"
+                            )}
+                          >
+                            {paymentKindLabel(payment.kind)}
+                          </span>
+                        </div>
+                        <div
+                          className={cn(
+                            "text-sm font-medium tabular-nums",
+                            payment.kind === "payment"
+                              ? "text-[#ecf15e]"
+                              : "text-[#b4b6bb]"
+                          )}
+                        >
                           {formatPriceBRL(payment.amountCents)}
                         </div>
                         <div className={cn("text-sm", ADMIN_SURFACE.muted)}>

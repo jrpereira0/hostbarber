@@ -14,7 +14,7 @@ Atualizado conforme o sistema evolui (última revisão: 30/jul/2026).
 | --- | --- |
 | `src/app/login-admin` | Login do painel admin da barbearia |
 | `src/app/plataforma/login` | Login do superadmin da plataforma |
-| `src/app/plataforma/(panel)` | Painel da plataforma: **Clientes** (lojas/`shops`) — lista, cadastro, edição, ativar/desativar, reset de senha do dono, suporte (abrir login + copiar e-mail), exclusão com confirmação pelo nome, cadastro e último acesso; **Financeiro** (`/plataforma/financeiro`) — resumo de mensalidades, lista por status e extrato; detalhe por cliente (`/plataforma/financeiro/[shopId]`) com plano de cobrança, registrar pagamento e histórico |
+| `src/app/plataforma/(panel)` | Painel da plataforma: **Clientes** (lojas/`shops`) — lista, cadastro, edição, ativar/desativar, reset de senha do dono, suporte (abrir login + copiar e-mail), exclusão com confirmação pelo nome, cadastro e último acesso; **Financeiro** (`/plataforma/financeiro`) — resumo de mensalidades, lista por status e extrato; detalhe por cliente (`/plataforma/financeiro/[shopId]`) com plano de cobrança, registrar pagamento, **dar mês grátis** (cortesia/indicação) e histórico |
 | `src/app/plataforma/(panel)/clientes` | Novo cliente e edição (`/plataforma/clientes/nova`, `/plataforma/clientes/[id]`). URLs antigas `/plataforma/barbearias/...` redirecionam |
 | `src/app/page.tsx` | Redireciona `/` → `/login-admin` |
 | `src/app/agenda` | Agenda pública do cliente: `/agenda` redireciona; `/agenda/[slug]` é a loja |
@@ -64,7 +64,7 @@ Atualizado conforme o sistema evolui (última revisão: 30/jul/2026).
 | --- | --- |
 | `platform_admins` | Superadmins da plataforma (cadastro de **clientes**/lojas em `/plataforma`) |
 | `shops` | Clientes da plataforma (cada registro = uma loja): perfil público, endereço, slots, confirmação WhatsApp, `active`, mensalidade (`monthly_fee_cents` + `billing_due_day`), `onboarding_completed_at`, etc. |
-| `platform_payments` | Pagamentos de mensalidade recebidos pelo superadmin (registro manual: valor, mês de referência, data) |
+| `platform_payments` | Lançamentos de mensalidade: `kind` = `payment` (dinheiro), `complimentary` (mês grátis) ou `referral` (indicação); valor, mês de referência e data. Créditos contam pro status “em dia”, mas não entram no total recebido |
 | `profiles` | Usuários do painel da barbearia (papel: `owner`, `barber` ou `reception`) |
 | `professionals` | Barbeiros: nome, sobrenome, apelido, WhatsApp, e-mail, Instagram, foto, ponto focal (`photo_position`), **% comissão** |
 | `services` | Serviços: nome, foto, ponto focal (`photo_position`), preço mínimo de referência (centavos), duração (minutos) |

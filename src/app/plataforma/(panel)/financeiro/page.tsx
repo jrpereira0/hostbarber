@@ -8,6 +8,7 @@ import {
 import {
   computeShopBillingStatus,
   monthKey,
+  normalizePaymentKind,
   sumPaymentsByShopMonth,
   type BillingShopRow,
   type PlatformPaymentRow,
@@ -44,7 +45,7 @@ export default async function PlatformFinanceiroPage() {
     admin
       .from("platform_payments")
       .select(
-        "id, shop_id, amount_cents, reference_month, paid_at, note, created_at, shops(name)"
+        "id, shop_id, amount_cents, reference_month, paid_at, note, kind, created_at, shops(name)"
       )
       .order("paid_at", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -70,6 +71,7 @@ export default async function PlatformFinanceiroPage() {
       referenceMonth: String(row.reference_month).slice(0, 10),
       paidAt: String(row.paid_at).slice(0, 10),
       note: row.note,
+      kind: normalizePaymentKind(row.kind),
       createdAt: row.created_at,
     };
   });
@@ -133,7 +135,7 @@ export default async function PlatformFinanceiroPage() {
     (s) => s.status.kind !== "unconfigured"
   );
   const receivedThisMonth = payments
-    .filter((p) => p.referenceMonth === currentMonth)
+    .filter((p) => p.referenceMonth === currentMonth && p.kind === "payment")
     .reduce((sum, p) => sum + p.amountCents, 0);
   const expectedThisMonth = configured.reduce(
     (sum, s) => sum + (s.monthlyFeeCents ?? 0),

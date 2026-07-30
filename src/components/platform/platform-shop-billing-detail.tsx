@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   CircleDashed,
   ExternalLink,
+  Gift,
   Mail,
   MoreHorizontal,
   Phone,
@@ -61,13 +62,16 @@ import {
   billingStatusLabel,
   formatBillingMonthLabel,
   monthKey,
+  paymentKindLabel,
   type BillingShopRow,
   type BillingStatusKind,
+  type PlatformPaymentKind,
   type PlatformPaymentRow,
 } from "@/lib/platform-billing";
 import {
   clearShopBilling,
   deletePayment,
+  grantFreeMonths,
   registerPayment,
   saveShopBilling,
 } from "@/app/plataforma/(panel)/financeiro/actions";
@@ -150,6 +154,11 @@ export function PlatformShopBillingDetail({
   );
   const [payNote, setPayNote] = useState("");
 
+  const [freeMonths, setFreeMonths] = useState("1");
+  const [freeKind, setFreeKind] =
+    useState<Exclude<PlatformPaymentKind, "payment">>("complimentary");
+  const [freeNote, setFreeNote] = useState("");
+
   const [pendingDelete, setPendingDelete] = useState<PlatformPaymentRow | null>(
     null
   );
@@ -228,6 +237,31 @@ export function PlatformShopBillingDetail({
       }
       toast.success("Lançamento excluído.");
       setPendingDelete(null);
+      router.refresh();
+    });
+  }
+
+  function submitFreeMonths() {
+    const months = Number(freeMonths);
+    startTransition(async () => {
+      const result = await grantFreeMonths({
+        shopId: shop.id,
+        months,
+        kind: freeKind,
+        note: freeNote,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const count = result.grantedMonths?.length ?? months;
+      toast.success(
+        count === 1
+          ? "1 mês grátis aplicado."
+          : `${count} meses grátis aplicados.`
+      );
+      setFreeNote("");
+      setFreeMonths("1");
       router.refresh();
     });
   }
@@ -433,6 +467,96 @@ export function PlatformShopBillingDetail({
         </div>
       </AdminFormSectionCard>
 
+      {/* Mês grátis */}
+      <AdminFormSectionCard
+        tone="dark"
+        title="Dar mês grátis"
+        description="Cortesia ou crédito por indicação. Cobre o próximo mês em aberto no extrato — sem contar como dinheiro recebido."
+      >
+        <div className="mb-4">
+          <FormSectionTitle
+            tone="dark"
+            icon={Gift}
+            title="Crédito de mensalidade"
+            description="Útil pra promoção e, depois, pro sistema de indicação. O status do cliente fica em dia nesses meses."
+          />
+        </div>
+        <AdminFormFields columns={2}>
+          <div className="space-y-2">
+            <DarkLabel htmlFor="freeMonths">Quantos meses</DarkLabel>
+            <Select
+              value={freeMonths}
+              onValueChange={setFreeMonths}
+              disabled={isPending || shop.monthlyFeeCents == null}
+            >
+              <SelectTrigger
+                id="freeMonths"
+                className={ADMIN_SURFACE.selectTrigger}
+              >
+                <SelectValue placeholder="Escolha" />
+              </SelectTrigger>
+              <SelectContent className="admin-popover">
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n === 1 ? "1 mês" : `${n} meses`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <DarkLabel htmlFor="freeKind">Motivo</DarkLabel>
+            <Select
+              value={freeKind}
+              onValueChange={(value) =>
+                setFreeKind(
+                  value === "referral" ? "referral" : "complimentary"
+                )
+              }
+              disabled={isPending || shop.monthlyFeeCents == null}
+            >
+              <SelectTrigger
+                id="freeKind"
+                className={ADMIN_SURFACE.selectTrigger}
+              >
+                <SelectValue placeholder="Escolha" />
+              </SelectTrigger>
+              <SelectContent className="admin-popover">
+                <SelectItem value="complimentary">Cortesia</SelectItem>
+                <SelectItem value="referral">Indicação</SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldHint>
+              Indicação já fica marcado separado pra quando o programa automático
+              existir.
+            </FieldHint>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <DarkLabel htmlFor="freeNote">Observação (opcional)</DarkLabel>
+            <Textarea
+              id="freeNote"
+              rows={2}
+              value={freeNote}
+              onChange={(e) => setFreeNote(e.target.value)}
+              placeholder="Ex.: indicação do João, promoção de abertura…"
+              className={ADMIN_SURFACE.input}
+              maxLength={500}
+              disabled={isPending || shop.monthlyFeeCents == null}
+            />
+          </div>
+        </AdminFormFields>
+        <div className="mt-5 flex justify-end border-t border-white/10 pt-4">
+          <Button
+            type="button"
+            disabled={isPending || shop.monthlyFeeCents == null}
+            onClick={submitFreeMonths}
+            className={cn("w-full sm:w-auto", ADMIN_SURFACE.btnPrimary)}
+          >
+            {isPending ? "Aplicando..." : "Dar mês grátis"}
+          </Button>
+        </div>
+      </AdminFormSectionCard>
+
       {/* Registrar pagamento */}
       <AdminFormSectionCard
         tone="dark"
@@ -518,24 +642,25 @@ export function PlatformShopBillingDetail({
       {/* Histórico */}
       <AdminFormSectionCard
         tone="dark"
-        title="Histórico de pagamentos"
+        title="Histórico de lançamentos"
         description={
           payments.length === 0
             ? "Nenhum lançamento ainda."
-            : `${payments.length} lançamento${payments.length === 1 ? "" : "s"} · total recebido ${formatPriceBRL(totalReceivedCents)}`
+            : `${payments.length} lançamento${payments.length === 1 ? "" : "s"} · dinheiro recebido ${formatPriceBRL(totalReceivedCents)}`
         }
       >
         {payments.length === 0 ? (
           <EmptyState
             icon={Banknote}
-            title="Nenhum pagamento"
-            description="Quando o cliente pagar, registre acima. O histórico aparece aqui."
+            title="Nenhum lançamento"
+            description="Quando o cliente pagar ou você der mês grátis, o histórico aparece aqui."
             className="border-white/10 bg-[#0e0f11]"
           />
         ) : (
           <div className="-mx-5 overflow-hidden sm:-mx-6">
-            <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.4fr)_52px] gap-3 border-b border-white/10 px-5 py-2.5 text-[11px] font-medium tracking-wide text-[#8b8d93] uppercase sm:px-6 md:grid">
+            <div className="hidden grid-cols-[minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_52px] gap-3 border-b border-white/10 px-5 py-2.5 text-[11px] font-medium tracking-wide text-[#8b8d93] uppercase sm:px-6 md:grid">
               <span>Data</span>
+              <span>Tipo</span>
               <span>Valor</span>
               <span>Referência</span>
               <span>Observação</span>
@@ -545,12 +670,31 @@ export function PlatformShopBillingDetail({
               {payments.map((payment) => (
                 <li
                   key={payment.id}
-                  className="grid grid-cols-1 gap-2 px-5 py-3.5 sm:px-6 md:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.4fr)_52px] md:items-center md:gap-3"
+                  className="grid grid-cols-1 gap-2 px-5 py-3.5 sm:px-6 md:grid-cols-[minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,0.95fr)_minmax(0,1.2fr)_52px] md:items-center md:gap-3"
                 >
                   <div className="text-sm tabular-nums text-[#f5f5f5]">
                     {formatDateBR(payment.paidAt)}
                   </div>
-                  <div className="text-sm font-medium tabular-nums text-[#ecf15e]">
+                  <div>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+                        payment.kind === "payment"
+                          ? "border-white/10 bg-white/5 text-[#f5f5f5]"
+                          : "border-[rgb(236_241_94_/_25%)] bg-[rgb(236_241_94_/_10%)] text-[#ecf15e]"
+                      )}
+                    >
+                      {paymentKindLabel(payment.kind)}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "text-sm font-medium tabular-nums",
+                      payment.kind === "payment"
+                        ? "text-[#ecf15e]"
+                        : "text-[#b4b6bb]"
+                    )}
+                  >
                     {formatPriceBRL(payment.amountCents)}
                   </div>
                   <div className={cn("text-sm", ADMIN_SURFACE.muted)}>

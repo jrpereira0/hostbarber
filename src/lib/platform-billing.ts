@@ -191,6 +191,8 @@ export function formatBillingMonthLabel(monthKeyStr: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+export type PlatformPaymentKind = "payment" | "complimentary" | "referral";
+
 export type PlatformPaymentRow = {
   id: string;
   shopId: string;
@@ -199,8 +201,55 @@ export type PlatformPaymentRow = {
   referenceMonth: string;
   paidAt: string;
   note: string | null;
+  kind: PlatformPaymentKind;
   createdAt: string;
 };
+
+export function paymentKindLabel(kind: PlatformPaymentKind): string {
+  switch (kind) {
+    case "complimentary":
+      return "Mês grátis";
+    case "referral":
+      return "Indicação";
+    default:
+      return "Pagamento";
+  }
+}
+
+export function normalizePaymentKind(value: unknown): PlatformPaymentKind {
+  if (value === "complimentary" || value === "referral") return value;
+  return "payment";
+}
+
+/**
+ * Próximos meses (a partir do cadastro) que ainda não cobrem a mensalidade.
+ * Usado para aplicar mês grátis / indicação no extrato.
+ */
+export function findUncoveredBillingMonths(input: {
+  monthlyFeeCents: number;
+  createdAt: string;
+  paymentsByMonth: Map<string, number>;
+  count: number;
+  today?: Date;
+}): string[] {
+  const fee = input.monthlyFeeCents;
+  const count = Math.max(0, Math.min(24, Math.floor(input.count)));
+  if (fee <= 0 || count === 0) return [];
+
+  const today = input.today ?? new Date();
+  const created = parseDayLocal(input.createdAt);
+  let cursor = `${created.year}-${String(created.month).padStart(2, "0")}-01`;
+  const endKey = shiftMonthKey(monthKey(today), 18);
+  const months: string[] = [];
+
+  while (cursor <= endKey && months.length < count) {
+    const paid = input.paymentsByMonth.get(cursor) ?? 0;
+    if (paid < fee) months.push(cursor);
+    cursor = shiftMonthKey(cursor, 1);
+  }
+
+  return months;
+}
 
 export type BillingShopRow = {
   id: string;
