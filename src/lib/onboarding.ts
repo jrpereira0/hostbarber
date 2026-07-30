@@ -57,15 +57,7 @@ export const TOUR_STEPS: TourStepDef[] = [
     href: "/admin/configuracoes?tab=perfil",
     target: "tour-settings-tabs",
     title: "As abas de Configurações",
-    body: "Tudo da loja fica aqui, separado por abas. Você troca de aba no topo — Perfil, Link, Horários, Dias especiais, Mensagens e Recepção.",
-    bullets: [
-      "Perfil: nome, WhatsApp, endereço e logo",
-      "Link: endereço público da agenda (/agenda/sua-loja)",
-      "Horários: dias e intervalos de atendimento",
-      "Dias especiais: feriados ou fechamentos pontuais",
-      "Mensagens: texto de confirmação no WhatsApp",
-      "Recepção: acesso da recepção (sem financeiro)",
-    ],
+    body: "Tudo da loja fica nestas abas no topo. Em seguida vamos abrir cada uma: Perfil, Link, Horários, Dias especiais, Mensagens e Recepção.",
   },
   {
     id: "profile",
