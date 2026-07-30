@@ -30,7 +30,9 @@ Atualizado conforme o sistema evolui (última revisão: jul/2026).
 | `src/app/admin/(panel)/comandas` | Server actions da comanda (sem página própria — a UI é o `ComandaDialog`, aberto a partir da agenda) |
 | `src/app/admin/(panel)/produtos` | Cadastro de produtos, estoque, comissão por item e categorias |
 | `src/app/admin/(panel)/configuracoes` | Perfil público da barbearia, horários, mensagens e recepção |
+| `src/app/admin/(panel)/primeiros-passos` | Onboarding do dono: perfil → equipe → serviços → produtos → explicação do caixa |
 | `src/app/admin/(panel)/minha-conta` | Tela do barbeiro para ver a própria grade e trocar a senha |
+| `src/lib/onboarding.ts` | Progresso do onboarding (critérios por dados da loja + `onboarding_completed_at`) |
 | `src/app/api/agenda/session` | `GET` sessão atual / `POST` entrar com WhatsApp / `DELETE` sair |
 | `src/app/api/v1/customers/me` | Perfil do cliente autenticado (`GET` / `PATCH` — Minha conta no site) |
 | `src/lib/client-api-session.ts` | Cookie assinado da sessão do cliente no `/agenda` |
@@ -57,7 +59,7 @@ Atualizado conforme o sistema evolui (última revisão: jul/2026).
 | Tabela | Função |
 | --- | --- |
 | `platform_admins` | Superadmins da plataforma (cadastro de **clientes**/lojas em `/plataforma`) |
-| `shops` | Clientes da plataforma (cada registro = uma loja): perfil público, endereço, slots, confirmação WhatsApp, `active`, mensalidade (`monthly_fee_cents` + `billing_due_day`), etc. |
+| `shops` | Clientes da plataforma (cada registro = uma loja): perfil público, endereço, slots, confirmação WhatsApp, `active`, mensalidade (`monthly_fee_cents` + `billing_due_day`), `onboarding_completed_at`, etc. |
 | `platform_payments` | Pagamentos de mensalidade recebidos pelo superadmin (registro manual: valor, mês de referência, data) |
 | `profiles` | Usuários do painel da barbearia (papel: `owner`, `barber` ou `reception`) |
 | `professionals` | Barbeiros: nome, sobrenome, apelido, WhatsApp, e-mail, Instagram, foto, ponto focal (`photo_position`), **% comissão** |

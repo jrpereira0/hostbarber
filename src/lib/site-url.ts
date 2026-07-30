@@ -1,5 +1,5 @@
 /** Origem canônica do site (URLs absolutas para Open Graph / WhatsApp). */
-const PRODUCTION_SITE_URL = "https://agendabarbearia-seven.vercel.app";
+const LOCAL_SITE_URL = "http://localhost:3000";
 
 export function getSiteUrl(): URL {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
@@ -16,5 +16,5 @@ export function getSiteUrl(): URL {
     return new URL(`https://${vercel}`);
   }
 
-  return new URL(PRODUCTION_SITE_URL);
+  return new URL(LOCAL_SITE_URL);
 }

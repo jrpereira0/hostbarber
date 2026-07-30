@@ -8,6 +8,7 @@ import {
   Contact,
   ExternalLink,
   History,
+  ListChecks,
   LogOut,
   Package,
   Percent,
@@ -100,6 +101,8 @@ type AppSidebarProps = {
   userEmail: string;
   /** Link público da agenda desta loja (`/agenda/{slug}`). */
   bookingHref?: string;
+  /** Mostra atalho de onboarding para o dono. */
+  showOnboarding?: boolean;
 };
 
 function isNavActive(pathname: string, url: string): boolean {
@@ -119,6 +122,7 @@ export function AppSidebar({
   userName,
   userEmail,
   bookingHref = BOOKING_PATH,
+  showOnboarding = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
@@ -202,6 +206,22 @@ export function AppSidebar({
           <SidebarGroupLabel>Conta</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              {isOwner && showOnboarding ? (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isNavActive(pathname, "/admin/primeiros-passos")}
+                    tooltip="Primeiros passos"
+                    onClick={() => setOpenMobile(false)}
+                  >
+                    <Link href="/admin/primeiros-passos">
+                      <ListChecks />
+                      <span>Primeiros passos</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ) : null}
+
               {isOwner ? (
                 <SidebarMenuItem>
                   <SidebarMenuButton

@@ -76,6 +76,8 @@ export default async function AdminLayout({
     ? bookingPathForSlug(shop.slug)
     : "/agenda";
 
+  const showOnboarding = role === "owner";
+
   return (
     <TooltipProvider>
       <SidebarProvider>
@@ -84,6 +86,7 @@ export default async function AdminLayout({
           userName={profile?.full_name || "Usuário"}
           userEmail={user.email ?? ""}
           bookingHref={bookingHref}
+          showOnboarding={showOnboarding}
         />
         <AdminPanelInset>
           <AdminSidebarToggle />
