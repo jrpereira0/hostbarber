@@ -18,10 +18,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { PageHeader } from "@/components/admin/page-header";
-import { FormSectionTitle } from "@/components/admin/form-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { ADMIN_SURFACE } from "@/lib/admin-surface";
 import { cn } from "@/lib/utils";
 import type { OnboardingStepId, OnboardingStatus } from "@/lib/onboarding";
@@ -36,13 +33,17 @@ type OnboardingViewProps = {
   initialStep?: OnboardingStepId;
 };
 
+const STEP_ORDER: OnboardingStepId[] = [
+  "shop",
+  "team",
+  "services",
+  "products",
+  "cash",
+];
+
 const STEP_META: Record<
   OnboardingStepId,
-  {
-    title: string;
-    short: string;
-    icon: typeof Store;
-  }
+  { title: string; short: string; icon: typeof Store }
 > = {
   shop: { title: "Sua barbearia", short: "Perfil", icon: Store },
   team: { title: "Equipe e acessos", short: "Equipe", icon: Users },
@@ -70,15 +71,19 @@ export function OnboardingView({
   );
   const [pending, startTransition] = useTransition();
 
-  const progressPct = useMemo(() => {
-    const weight = status.steps.filter((s) => s.done).length;
-    return Math.round((weight / status.steps.length) * 100);
-  }, [status.steps]);
+  const activeIndex = STEP_ORDER.indexOf(active);
+  const doneCount = status.steps.filter((s) => s.done).length;
+  const progressPct = useMemo(
+    () => Math.round((doneCount / status.steps.length) * 100),
+    [doneCount, status.steps.length]
+  );
 
   function finish(kind: "complete" | "skip") {
     startTransition(async () => {
       const result =
-        kind === "complete" ? await completeOnboarding() : await skipOnboarding();
+        kind === "complete"
+          ? await completeOnboarding()
+          : await skipOnboarding();
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -93,63 +98,131 @@ export function OnboardingView({
     });
   }
 
+  function goNext() {
+    const next = STEP_ORDER[activeIndex + 1];
+    if (next) setActive(next);
+  }
+
+  function goPrev() {
+    const prev = STEP_ORDER[activeIndex - 1];
+    if (prev) setActive(prev);
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <PageHeader
-        tone="dark"
-        title="Primeiros passos"
-        description={
-          status.completed
-            ? `${shopName} já passou pela configuração inicial. Use esta página como guia quando precisar.`
-            : `Vamos deixar ${shopName} pronta para atender: perfil, equipe, catálogo e o caixa do dia.`
-        }
-        action={
-          !status.completed ? (
+    <div
+      className={cn(
+        "admin-page -m-4 flex min-h-full flex-col p-4 pb-28 md:-m-8 md:p-8 md:pb-8",
+        ADMIN_SURFACE.page
+      )}
+    >
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 md:gap-6">
+        <PageHeader
+          tone="dark"
+          title="Primeiros passos"
+          description={
+            status.completed
+              ? `${shopName} já passou pela configuração inicial. Use esta página como guia quando precisar.`
+              : `Vamos deixar ${shopName} pronta para atender.`
+          }
+          action={
             <Button
               type="button"
               variant="outline"
-              className={ADMIN_SURFACE.btnGhost}
+              className={cn(ADMIN_SURFACE.btnGhost, "w-full sm:w-auto")}
               disabled={pending}
-              onClick={() => finish("skip")}
+              onClick={() =>
+                status.completed ? router.push("/admin") : finish("skip")
+              }
             >
-              Ir para a agenda
+              {status.completed ? "Abrir agenda" : "Ir para a agenda"}
             </Button>
-          ) : (
-            <Button asChild className={ADMIN_SURFACE.btnPrimary}>
-              <Link href="/admin">Abrir agenda</Link>
-            </Button>
-          )
-        }
-      />
+          }
+        />
 
-      <Card className={cn(ADMIN_SURFACE.panel, "overflow-hidden")}>
-        <CardContent className="space-y-4 p-5 sm:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className={ADMIN_SURFACE.sectionLabel}>Progresso</p>
-              <p className="mt-1 text-sm text-[#f5f5f5]">
-                {status.steps.filter((s) => s.done).length} de{" "}
-                {status.steps.length} etapas
-                {done.products ? "" : " · produtos são opcionais"}
-              </p>
-            </div>
-            <p className={cn("text-sm tabular-nums", ADMIN_SURFACE.muted)}>
+        {/* Progresso compacto */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <p className={ADMIN_SURFACE.muted}>
+              <span className="font-medium text-[#f5f5f5]">
+                {doneCount}/{status.steps.length}
+              </span>{" "}
+              etapas
+              <span className="hidden sm:inline">
+                {" "}
+                · produtos são opcionais
+              </span>
+            </p>
+            <p className={cn("tabular-nums", ADMIN_SURFACE.muted)}>
               {progressPct}%
             </p>
           </div>
-          <div className={cn("h-1.5 overflow-hidden rounded-full", ADMIN_SURFACE.progress)}>
+          <div
+            className={cn(
+              "h-1 overflow-hidden rounded-full",
+              ADMIN_SURFACE.progress
+            )}
+          >
             <div
-              className={cn("h-full rounded-full transition-all", ADMIN_SURFACE.progressBar)}
+              className={cn(
+                "h-full rounded-full transition-all duration-300",
+                ADMIN_SURFACE.progressBar
+              )}
               style={{ width: `${progressPct}%` }}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)]">
-        <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-          {(Object.keys(STEP_META) as OnboardingStepId[]).map((id, index) => {
-            const meta = STEP_META[id];
+        {/* Stepper mobile: círculos em linha */}
+        <nav
+          aria-label="Etapas"
+          className="flex items-center justify-between gap-1 sm:hidden"
+        >
+          {STEP_ORDER.map((id, index) => {
+            const isActive = active === id;
+            const isDone = done[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActive(id)}
+                className="flex min-w-0 flex-1 flex-col items-center gap-1.5"
+                aria-current={isActive ? "step" : undefined}
+              >
+                <span
+                  className={cn(
+                    "flex size-9 items-center justify-center rounded-full border text-xs font-semibold tabular-nums transition-colors",
+                    isDone &&
+                      "border-[#ecf15e] bg-[#ecf15e] text-[#0e0f11]",
+                    !isDone &&
+                      isActive &&
+                      "border-[#ecf15e] bg-[rgb(236_241_94_/_14%)] text-[#ecf15e]",
+                    !isDone &&
+                      !isActive &&
+                      "border-white/15 bg-transparent text-[#b4b6bb]"
+                  )}
+                >
+                  {isDone ? <Check className="size-3.5" strokeWidth={2.5} /> : index + 1}
+                </span>
+                <span
+                  className={cn(
+                    "max-w-full truncate text-[10px] font-medium tracking-wide uppercase",
+                    isActive || isDone ? "text-[#f5f5f5]" : ADMIN_SURFACE.muted
+                  )}
+                >
+                  {STEP_META[id].short}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Stepper desktop: lista vertical compacta acima do conteúdo em md? 
+            Em desktop usamos chips horizontais limpos */}
+        <nav
+          aria-label="Etapas"
+          className="hidden gap-2 sm:flex sm:flex-wrap"
+        >
+          {STEP_ORDER.map((id, index) => {
             const isActive = active === id;
             const isDone = done[id];
             const optional = status.steps.find((s) => s.id === id)?.optional;
@@ -159,75 +232,128 @@ export function OnboardingView({
                 type="button"
                 onClick={() => setActive(id)}
                 className={cn(
-                  "flex min-w-[9.5rem] items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors lg:min-w-0",
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors",
                   isActive
-                    ? "border-[rgb(236_241_94_/_35%)] bg-[rgb(236_241_94_/_10%)]"
-                    : "border-white/10 bg-[#151618] hover:border-white/20"
+                    ? "border-[#ecf15e] bg-[rgb(236_241_94_/_12%)] text-[#f5f5f5]"
+                    : "border-white/10 bg-[#151618] text-[#b4b6bb] hover:border-white/20 hover:text-[#f5f5f5]"
                 )}
               >
                 <span
                   className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-md border text-xs font-semibold tabular-nums",
+                    "flex size-5 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums",
                     isDone
-                      ? "border-[rgb(236_241_94_/_40%)] bg-[rgb(236_241_94_/_14%)] text-[#ecf15e]"
+                      ? "bg-[#ecf15e] text-[#0e0f11]"
                       : isActive
-                        ? "border-white/15 bg-[#1a1b1e] text-[#ecf15e]"
-                        : "border-white/10 bg-[#1a1b1e] text-[#b4b6bb]"
+                        ? "bg-[rgb(236_241_94_/_20%)] text-[#ecf15e]"
+                        : "bg-white/10 text-[#b4b6bb]"
                   )}
                 >
-                  {isDone ? <Check className="size-3.5" /> : index + 1}
+                  {isDone ? <Check className="size-3" strokeWidth={2.5} /> : index + 1}
                 </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-[#f5f5f5]">
-                    {meta.short}
-                  </span>
-                  <span className={cn("block text-xs", ADMIN_SURFACE.muted)}>
-                    {isDone
-                      ? "Concluído"
-                      : optional
-                        ? "Opcional"
-                        : "Pendente"}
-                  </span>
-                </span>
+                <span className="font-medium">{STEP_META[id].short}</span>
+                {optional && !isDone ? (
+                  <span className="text-xs text-[#8b8d93]">opc.</span>
+                ) : null}
               </button>
             );
           })}
         </nav>
 
-        <Card className={ADMIN_SURFACE.panel}>
-          <CardContent className="space-y-6 p-5 sm:p-6">
-            {active === "shop" ? (
-              <ShopStep done={done.shop} />
-            ) : null}
-            {active === "team" ? (
-              <TeamStep done={done.team} />
-            ) : null}
-            {active === "services" ? (
-              <ServicesStep done={done.services} />
-            ) : null}
-            {active === "products" ? (
-              <ProductsStep
-                done={done.products}
-                onSkipToCash={() => setActive("cash")}
-              />
-            ) : null}
-            {active === "cash" ? (
-              <CashStep
-                canFinish={done.shop && done.team && done.services}
-                completed={status.completed}
-                pending={pending}
-                onFinish={() => finish("complete")}
-              />
-            ) : null}
-          </CardContent>
-        </Card>
+        {/* Conteúdo da etapa */}
+        <section className="rounded-2xl border border-white/10 bg-[#151618] p-4 sm:p-6">
+          {active === "shop" ? <ShopStep done={done.shop} /> : null}
+          {active === "team" ? <TeamStep done={done.team} /> : null}
+          {active === "services" ? <ServicesStep done={done.services} /> : null}
+          {active === "products" ? (
+            <ProductsStep
+              done={done.products}
+              onSkipToCash={() => setActive("cash")}
+            />
+          ) : null}
+          {active === "cash" ? (
+            <CashStep
+              canFinish={done.shop && done.team && done.services}
+              completed={status.completed}
+              pending={pending}
+              onFinish={() => finish("complete")}
+            />
+          ) : null}
+        </section>
+
+        {/* Navegação entre etapas — desktop */}
+        <div className="hidden items-center justify-between gap-3 md:flex">
+          <Button
+            type="button"
+            variant="outline"
+            className={ADMIN_SURFACE.btnGhost}
+            disabled={activeIndex === 0}
+            onClick={goPrev}
+          >
+            Anterior
+          </Button>
+          {active !== "cash" ? (
+            <Button
+              type="button"
+              className={ADMIN_SURFACE.btnPrimary}
+              onClick={goNext}
+            >
+              Próxima etapa
+              <ArrowRight className="size-4" />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Barra fixa no mobile */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0e0f11]/95 p-3 backdrop-blur-md md:hidden">
+        <div className="mx-auto flex max-w-3xl gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={cn(ADMIN_SURFACE.btnGhost, "flex-1")}
+            disabled={activeIndex === 0}
+            onClick={goPrev}
+          >
+            Anterior
+          </Button>
+          {active === "cash" ? (
+            status.completed ? (
+              <Button asChild className={cn(ADMIN_SURFACE.btnPrimary, "flex-[1.4]")}>
+                <Link href="/admin">Abrir agenda</Link>
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className={cn(ADMIN_SURFACE.btnPrimary, "flex-[1.4]")}
+                disabled={
+                  pending || !(done.shop && done.team && done.services)
+                }
+                onClick={() => finish("complete")}
+              >
+                {done.shop && done.team && done.services
+                  ? "Começar a usar"
+                  : "Falta equipe/serviço"}
+              </Button>
+            )
+          ) : (
+            <Button
+              type="button"
+              className={cn(ADMIN_SURFACE.btnPrimary, "flex-[1.4]")}
+              onClick={goNext}
+            >
+              Próxima
+              <ArrowRight className="size-4" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 function StepShell({
-  icon,
+  icon: Icon,
+  stepNumber,
   title,
   description,
   done,
@@ -235,6 +361,7 @@ function StepShell({
   actions,
 }: {
   icon: typeof Store;
+  stepNumber: number;
   title: string;
   description: string;
   done: boolean;
@@ -242,31 +369,40 @@ function StepShell({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <FormSectionTitle
-          tone="dark"
-          icon={icon}
-          title={title}
-          description={description}
-        />
-        <span
-          className={cn(
-            "rounded-full border px-2.5 py-1 text-xs font-medium",
-            done
-              ? "border-[rgb(236_241_94_/_35%)] bg-[rgb(236_241_94_/_12%)] text-[#ecf15e]"
-              : "border-white/10 text-[#b4b6bb]"
-          )}
-        >
-          {done ? "Pronto" : "Em andamento"}
-        </span>
+    <div className="flex flex-col gap-5">
+      <div className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[#1a1b1e] text-[#ecf15e]">
+          <Icon className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className={ADMIN_SURFACE.sectionLabel}>Etapa {stepNumber}</p>
+            <span
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                done
+                  ? "border-[rgb(236_241_94_/_40%)] text-[#ecf15e]"
+                  : "border-white/10 text-[#b4b6bb]"
+              )}
+            >
+              {done ? "Pronto" : "Pendente"}
+            </span>
+          </div>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-[#f5f5f5] sm:text-xl">
+            {title}
+          </h2>
+          <p className={cn("mt-1.5 text-sm leading-relaxed", ADMIN_SURFACE.muted)}>
+            {description}
+          </p>
+        </div>
       </div>
+
       {children}
+
       {actions ? (
-        <>
-          <Separator className="bg-white/10" />
-          <div className="flex flex-wrap gap-2">{actions}</div>
-        </>
+        <div className="flex flex-col gap-2 border-t border-white/10 pt-5 sm:flex-row sm:flex-wrap">
+          {actions}
+        </div>
       ) : null}
     </div>
   );
@@ -277,8 +413,8 @@ function TipList({ items }: { items: string[] }) {
     <ul className="space-y-3">
       {items.map((item) => (
         <li key={item} className="flex gap-3 text-sm leading-relaxed">
-          <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#ecf15e]" />
-          <span className={ADMIN_SURFACE.muted}>{item}</span>
+          <span className="mt-2 size-1.5 shrink-0 rounded-full bg-[#ecf15e]" />
+          <span className="text-[#c8c9cd]">{item}</span>
         </li>
       ))}
     </ul>
@@ -293,7 +429,7 @@ function PrimaryLink({
   children: React.ReactNode;
 }) {
   return (
-    <Button asChild className={ADMIN_SURFACE.btnPrimary}>
+    <Button asChild className={cn(ADMIN_SURFACE.btnPrimary, "w-full sm:w-auto")}>
       <Link href={href}>
         {children}
         <ArrowRight className="size-4" />
@@ -310,7 +446,11 @@ function GhostLink({
   children: React.ReactNode;
 }) {
   return (
-    <Button asChild variant="outline" className={ADMIN_SURFACE.btnGhost}>
+    <Button
+      asChild
+      variant="outline"
+      className={cn(ADMIN_SURFACE.btnGhost, "w-full sm:w-auto")}
+    >
       <Link href={href}>{children}</Link>
     </Button>
   );
@@ -320,8 +460,9 @@ function ShopStep({ done }: { done: boolean }) {
   return (
     <StepShell
       icon={Store}
-      title="1. Cadastre as informações da barbearia"
-      description="É o que o cliente vê no site e o que aparece nos horários e no link de agendamento."
+      stepNumber={1}
+      title="Cadastre as informações da barbearia"
+      description="É o que o cliente vê no site e no link de agendamento."
       done={done}
       actions={
         <>
@@ -329,7 +470,7 @@ function ShopStep({ done }: { done: boolean }) {
             Abrir configurações
           </PrimaryLink>
           <GhostLink href="/admin/configuracoes">
-            Ajustar horários de funcionamento
+            Ajustar horários
           </GhostLink>
         </>
       }
@@ -338,25 +479,21 @@ function ShopStep({ done }: { done: boolean }) {
         items={[
           "Preencha nome, WhatsApp, endereço e, se quiser, logo e Instagram.",
           "Revise o link público da agenda — é o que você envia para o cliente.",
-          "Confira os horários de funcionamento e o intervalo dos slots (15, 30, 45 ou 60 min).",
+          "Confira os horários e o intervalo dos slots (15, 30, 45 ou 60 min).",
           "Volte aqui depois de salvar: o progresso atualiza sozinho.",
         ]}
       />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <MiniCard
-          icon={Store}
-          title="Perfil"
-          text="Nome, contato e endereço."
-        />
-        <MiniCard
+      <div className="grid gap-2">
+        <MiniRow icon={Store} title="Perfil" text="Nome, contato e endereço" />
+        <MiniRow
           icon={Link2}
           title="Link"
-          text="Página pública /agenda/sua-loja."
+          text="Página pública /agenda/sua-loja"
         />
-        <MiniCard
+        <MiniRow
           icon={Clock3}
           title="Horários"
-          text="Dias abertos e grade da semana."
+          text="Dias abertos e grade da semana"
         />
       </div>
     </StepShell>
@@ -367,8 +504,9 @@ function TeamStep({ done }: { done: boolean }) {
   return (
     <StepShell
       icon={Users}
-      title="2. Cadastre a equipe e os acessos"
-      description="Cada profissional entra na agenda com o próprio horário. O dono define o que cada um pode fazer."
+      stepNumber={2}
+      title="Cadastre a equipe e os acessos"
+      description="Cada profissional entra na agenda com horário, comissão e permissões."
       done={done}
       actions={
         <>
@@ -376,18 +514,16 @@ function TeamStep({ done }: { done: boolean }) {
             Cadastrar profissional
           </PrimaryLink>
           <GhostLink href="/admin/profissionais">Ver equipe</GhostLink>
-          <GhostLink href="/admin/configuracoes">
-            Recepção (opcional)
-          </GhostLink>
+          <GhostLink href="/admin/configuracoes">Recepção (opcional)</GhostLink>
         </>
       }
     >
       <TipList
         items={[
           "Cadastre ao menos um barbeiro para a agenda funcionar.",
-          "No cadastro, defina horário de atendimento, % de comissão e permissões (marcar, comanda, encaixe etc.).",
-          "Se a loja tiver recepção, cadastre em Configurações → Recepção: ela vê a agenda toda, sem financeiro.",
-          "Dica: o próprio dono também pode ser um profissional se atender clientes.",
+          "Defina horário, % de comissão e permissões (marcar, comanda, encaixe).",
+          "Recepção em Configurações: vê a agenda toda, sem financeiro.",
+          "O dono também pode ser um profissional se atender clientes.",
         ]}
       />
     </StepShell>
@@ -398,8 +534,9 @@ function ServicesStep({ done }: { done: boolean }) {
   return (
     <StepShell
       icon={Scissors}
-      title="3. Cadastre os serviços"
-      description="Corte, barba, combo — com preço e duração. Isso monta a agenda e a comanda."
+      stepNumber={3}
+      title="Cadastre os serviços"
+      description="Corte, barba, combo — com preço e duração. Monta a agenda e a comanda."
       done={done}
       actions={
         <>
@@ -414,8 +551,8 @@ function ServicesStep({ done }: { done: boolean }) {
         items={[
           "Informe nome, duração em minutos e preço.",
           "A duração define quanto tempo o horário ocupa na agenda.",
-          "Você pode ter preços diferentes por dia da semana, se precisar.",
-          "Sem serviço ativo, o cliente não consegue agendar pelo site.",
+          "Dá para ter preços diferentes por dia da semana.",
+          "Sem serviço ativo, o cliente não agenda pelo site.",
         ]}
       />
     </StepShell>
@@ -432,8 +569,9 @@ function ProductsStep({
   return (
     <StepShell
       icon={Package}
-      title="4. Cadastre os produtos (opcional)"
-      description="Pomadas, bebidas, kits — vendidos na comanda, com estoque e comissão se quiser."
+      stepNumber={4}
+      title="Cadastre os produtos"
+      description="Opcional. Pomadas, bebidas e kits vendidos na comanda."
       done={done}
       actions={
         <>
@@ -444,7 +582,7 @@ function ProductsStep({
           <Button
             type="button"
             variant="outline"
-            className={ADMIN_SURFACE.btnGhost}
+            className={cn(ADMIN_SURFACE.btnGhost, "w-full sm:w-auto")}
             onClick={onSkipToCash}
           >
             Pular e ir para o caixa
@@ -457,7 +595,7 @@ function ProductsStep({
         items={[
           "Dá para começar sem produtos e voltar depois.",
           "Organize por categorias se a lista crescer.",
-          "Na comanda, produto pode ir com ou sem barbeiro (sem barbeiro = sem comissão).",
+          "Na comanda, produto pode ir com ou sem barbeiro.",
           "O estoque baixa quando a venda é registrada.",
         ]}
       />
@@ -479,12 +617,16 @@ function CashStep({
   return (
     <StepShell
       icon={Wallet}
-      title="5. Como funciona o caixa"
+      stepNumber={5}
+      title="Como funciona o caixa"
       description="O caixa organiza o dinheiro do dia. Sem caixa aberto, a comanda não fecha."
       done={completed}
       actions={
         completed ? (
-          <Button asChild className={ADMIN_SURFACE.btnPrimary}>
+          <Button
+            asChild
+            className={cn(ADMIN_SURFACE.btnPrimary, "hidden w-full sm:inline-flex sm:w-auto")}
+          >
             <Link href="/admin">
               Ir para a agenda
               <ArrowRight className="size-4" />
@@ -493,7 +635,10 @@ function CashStep({
         ) : (
           <Button
             type="button"
-            className={ADMIN_SURFACE.btnPrimary}
+            className={cn(
+              ADMIN_SURFACE.btnPrimary,
+              "hidden w-full sm:inline-flex sm:w-auto"
+            )}
             disabled={pending || !canFinish}
             onClick={onFinish}
           >
@@ -507,63 +652,63 @@ function CashStep({
     >
       <div className="space-y-4">
         <p className={cn("text-sm leading-relaxed", ADMIN_SURFACE.muted)}>
-          Pense no caixa como o envelope do dia: você abre de manhã, registra o
-          que entra ao fechar cada comanda e encerra no fim do expediente.
+          Pense no caixa como o envelope do dia: abre de manhã, registra o que
+          entra ao fechar cada comanda e encerra no fim do expediente.
         </p>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <LessonCard
+        <div className="grid gap-2">
+          <LessonRow
             step="1"
             icon={Wallet}
             title="Abrir o caixa"
-            text="Na agenda, aba Caixa, abra o caixa do dia. Só pode haver um caixa aberto por vez."
+            text="Na agenda, aba Caixa. Só um caixa aberto por vez."
           />
-          <LessonCard
+          <LessonRow
             step="2"
             icon={Receipt}
-            title="Atender e fechar a comanda"
-            text="Cada cliente do dia tem uma comanda. Ao finalizar, escolha a forma de pagamento (Pix, dinheiro, cartão…)."
+            title="Fechar a comanda"
+            text="Escolha a forma de pagamento (Pix, dinheiro, cartão…)."
           />
-          <LessonCard
+          <LessonRow
             step="3"
             icon={Banknote}
             title="O valor entra no caixa"
-            text="Pagamentos reais entram no caixa do dia. Uso de crédito da loja não soma de novo (o dinheiro já entrou antes)."
+            text="Pagamentos reais entram. Crédito da loja não soma de novo."
           />
-          <LessonCard
+          <LessonRow
             step="4"
             icon={Clock3}
             title="Encerrar e consultar"
-            text="No fim do dia, encerre o caixa. O histórico fica em Caixas; o resumo do período em Financeiro."
+            text="Encerre no fim do dia. Histórico em Caixas; resumo em Financeiro."
           />
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
-          <p className="text-sm font-medium text-[#f5f5f5]">Regras que evitam dor de cabeça</p>
-          <ul className="mt-3 space-y-2 text-sm leading-relaxed text-[#b4b6bb]">
+          <p className="text-sm font-medium text-[#f5f5f5]">
+            Regras que evitam dor de cabeça
+          </p>
+          <ul className="mt-3 space-y-2.5 text-sm leading-relaxed text-[#b4b6bb]">
             <li>
-              · Só o <span className="text-[#f5f5f5]">dono</span> opera o caixa
-              (abrir/encerrar).
+              · Só o <span className="text-[#f5f5f5]">dono</span> abre e encerra
+              o caixa.
             </li>
             <li>
-              · Comanda só fecha se o caixa do{" "}
-              <span className="text-[#f5f5f5]">mesmo dia</span> estiver aberto.
+              · Comanda só fecha com o caixa do{" "}
+              <span className="text-[#f5f5f5]">mesmo dia</span> aberto.
             </li>
             <li>
-              · Comissão do barbeiro é calculada sobre o valor cobrado dos
-              serviços (e produtos com profissional).
+              · Comissão é sobre o valor cobrado dos serviços (e produtos com
+              profissional).
             </li>
             <li>
-              · Gorjeta vai 100% para o barbeiro escolhido e também entra no
-              caixa.
+              · Gorjeta vai 100% para o barbeiro e também entra no caixa.
             </li>
           </ul>
         </div>
 
         {!canFinish ? (
           <p className={cn("text-sm", ADMIN_SURFACE.muted)}>
-            Antes de liberar a operação, cadastre pelo menos um profissional e um
-            serviço nos passos anteriores.
+            Antes de liberar, cadastre pelo menos um profissional e um serviço.
           </p>
         ) : null}
       </div>
@@ -571,7 +716,7 @@ function CashStep({
   );
 }
 
-function MiniCard({
+function MiniRow({
   icon: Icon,
   title,
   text,
@@ -581,19 +726,19 @@ function MiniCard({
   text: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-[#1a1b1e] p-4">
-      <div className="mb-3 flex size-8 items-center justify-center rounded-md border border-white/10 text-[#ecf15e]">
-        <Icon className="size-4" />
+    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#1a1b1e] px-3 py-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-[#ecf15e]">
+        <Icon className="size-3.5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-[#f5f5f5]">{title}</p>
+        <p className={cn("truncate text-xs", ADMIN_SURFACE.muted)}>{text}</p>
       </div>
-      <p className="text-sm font-medium text-[#f5f5f5]">{title}</p>
-      <p className={cn("mt-1 text-xs leading-relaxed", ADMIN_SURFACE.muted)}>
-        {text}
-      </p>
     </div>
   );
 }
 
-function LessonCard({
+function LessonRow({
   step,
   icon: Icon,
   title,
@@ -605,15 +750,19 @@ function LessonCard({
   text: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-[#151618] p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="flex size-6 items-center justify-center rounded-full border border-[rgb(236_241_94_/_35%)] text-[11px] font-semibold text-[#ecf15e]">
-          {step}
-        </span>
-        <Icon className="size-4 text-[#ecf15e]" />
-        <p className="text-sm font-medium text-[#f5f5f5]">{title}</p>
+    <div className="flex gap-3 rounded-xl border border-white/10 bg-[#1a1b1e] px-3 py-3">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-[rgb(236_241_94_/_35%)] text-[11px] font-semibold text-[#ecf15e]">
+        {step}
+      </span>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Icon className="size-3.5 shrink-0 text-[#ecf15e]" />
+          <p className="text-sm font-medium text-[#f5f5f5]">{title}</p>
+        </div>
+        <p className={cn("mt-1 text-sm leading-relaxed", ADMIN_SURFACE.muted)}>
+          {text}
+        </p>
       </div>
-      <p className={cn("text-sm leading-relaxed", ADMIN_SURFACE.muted)}>{text}</p>
     </div>
   );
 }
