@@ -327,10 +327,17 @@ export function tourStorageKey(shopId: string) {
 
 /** Evento disparado quando o progresso do guia muda (sidebar escuta). */
 export const TOUR_PROGRESS_EVENT = "hostbarber-tour-progress";
+/** Evento para retomar o guia pausado (sidebar dispara). */
+export const TOUR_RESUME_EVENT = "hostbarber-tour-resume";
 
 export function notifyTourProgress() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(TOUR_PROGRESS_EVENT));
+}
+
+export function requestTourResume() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(TOUR_RESUME_EVENT));
 }
 
 export function readTourProgress(shopId: string): {

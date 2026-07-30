@@ -26,6 +26,7 @@ import { ADMIN_SURFACE } from "@/lib/admin-surface";
 import { cn } from "@/lib/utils";
 import {
   TOUR_PHASES,
+  TOUR_RESUME_EVENT,
   TOUR_STEPS,
   isTourStepDone,
   notifyTourProgress,
@@ -45,7 +46,6 @@ type OnboardingTourProps = {
   shopName: string;
   status: OnboardingStatus;
   forceWelcome?: boolean;
-  forceResume?: boolean;
 };
 
 type Rect = { top: number; left: number; width: number; height: number };
@@ -113,12 +113,24 @@ function visibleRectOf(el: HTMLElement, pad = 8): Rect | null {
   return { top, left, width, height };
 }
 
+function readValidStoredStep(shopId: string): OnboardingStepId | null {
+  const stored = readStoredStep(shopId);
+  if (
+    !stored ||
+    stored === "welcome" ||
+    stored === "done" ||
+    !TOUR_STEPS.some((s) => s.id === stored)
+  ) {
+    return null;
+  }
+  return stored;
+}
+
 export function OnboardingTour({
   shopId,
   shopName,
   status,
   forceWelcome = false,
-  forceResume = false,
 }: OnboardingTourProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -132,54 +144,76 @@ export function OnboardingTour({
   const [pending, startTransition] = useTransition();
   const didScrollRef = useRef<string | null>(null);
   const targetElRef = useRef<HTMLElement | null>(null);
+  const initializedRef = useRef(false);
 
+  const resumeFromStorage = useCallback(() => {
+    const validStored = readValidStoredStep(shopId);
+    if (!validStored) {
+      setWelcomeOpen(true);
+      setActiveId(null);
+      setPausedId(null);
+      return;
+    }
+    setWelcomeOpen(false);
+    setCelebrationOpen(false);
+    setPausedId(null);
+    setTargetRect(null);
+    setActiveId(validStored);
+    const def = TOUR_STEPS.find((s) => s.id === validStored);
+    if (def) router.push(def.href);
+  }, [shopId, router]);
+
+  // Inicializa uma vez: não reexecuta ao mudar a URL (isso apagava o tour).
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setMounted(true);
-      const stored = readStoredStep(shopId);
-      const validStored =
-        stored &&
-        stored !== "welcome" &&
-        stored !== "done" &&
-        TOUR_STEPS.some((s) => s.id === stored)
-          ? stored
-          : null;
+      if (initializedRef.current) return;
+      initializedRef.current = true;
 
-      if (forceResume && validStored) {
-        setWelcomeOpen(false);
-        setPausedId(null);
-        setActiveId(validStored);
-        router.replace("/admin", { scroll: false });
-        return;
-      }
+      const validStored = readValidStoredStep(shopId);
 
       if (forceWelcome) {
         setWelcomeOpen(true);
         setActiveId(null);
         setPausedId(validStored);
+        notifyTourProgress();
         return;
       }
-      if (!stored || stored === "welcome") {
-        setWelcomeOpen(true);
-        setActiveId(null);
-        setPausedId(null);
-        return;
-      }
-      if (stored === "done") return;
+
       if (!validStored) {
+        const stored = readStoredStep(shopId);
+        if (stored === "done") return;
         setWelcomeOpen(true);
         setActiveId(null);
         setPausedId(null);
         return;
       }
-      // Pausado: retoma pela sidebar (Continuar guia).
+
       setWelcomeOpen(false);
       setActiveId(null);
       setPausedId(validStored);
       notifyTourProgress();
     });
     return () => cancelAnimationFrame(frame);
-  }, [shopId, forceWelcome, forceResume, router]);
+    // Só no mount / troca de loja — forceWelcome do 1º paint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shopId]);
+
+  useEffect(() => {
+    if (!forceWelcome || !mounted) return;
+    const validStored = readValidStoredStep(shopId);
+    setWelcomeOpen(true);
+    setActiveId(null);
+    setPausedId(validStored);
+  }, [forceWelcome, mounted, shopId]);
+
+  useEffect(() => {
+    function onResume() {
+      resumeFromStorage();
+    }
+    window.addEventListener(TOUR_RESUME_EVENT, onResume);
+    return () => window.removeEventListener(TOUR_RESUME_EVENT, onResume);
+  }, [resumeFromStorage]);
 
   const activeStep: TourStepDef | null = useMemo(() => {
     if (!activeId || activeId === "welcome" || activeId === "done") return null;
@@ -325,16 +359,7 @@ export function OnboardingTour({
   }
 
   function resumeTour() {
-    const stored = pausedId ?? readStoredStep(shopId);
-    if (stored && TOUR_STEPS.some((s) => s.id === stored)) {
-      setWelcomeOpen(false);
-      setPausedId(null);
-      setActiveId(stored);
-      const def = TOUR_STEPS.find((s) => s.id === stored);
-      if (def) router.push(def.href);
-      return;
-    }
-    setWelcomeOpen(true);
+    resumeFromStorage();
   }
 
   function finishTour(kind: "complete" | "skip") {

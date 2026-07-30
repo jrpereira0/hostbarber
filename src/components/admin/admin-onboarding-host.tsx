@@ -18,9 +18,7 @@ export function AdminOnboardingHost({
   const searchParams = useSearchParams();
   if (status.completed) return null;
 
-  const guia = searchParams.get("guia");
-  const forceWelcome = guia === "1";
-  const forceResume = guia === "continuar";
+  const forceWelcome = searchParams.get("guia") === "1";
 
   return (
     <OnboardingTour
@@ -28,7 +26,6 @@ export function AdminOnboardingHost({
       shopName={shopName}
       status={status}
       forceWelcome={forceWelcome}
-      forceResume={forceResume}
     />
   );
 }
