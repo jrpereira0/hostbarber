@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient, requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
-import { requireOwner, type ActionResult } from "@/lib/require-owner";
+import { requireOwnerSession, type ActionResult } from "@/lib/require-owner";
 import { uploadPublicPhoto } from "@/lib/upload-photo";
 import { normalizePhotoPosition } from "@/lib/photo-position";
 import {
@@ -125,7 +125,11 @@ async function uploadPhoto(
   return result.ok ? result.url : null;
 }
 
-async function syncServices(professionalId: string, serviceIds: string[]) {
+async function syncServices(
+  professionalId: string,
+  serviceIds: string[],
+  shopId: string
+) {
   const admin = createAdminClient();
   if (!admin) return;
   await admin
@@ -134,20 +138,32 @@ async function syncServices(professionalId: string, serviceIds: string[]) {
     .eq("professional_id", professionalId);
 
   if (serviceIds.length > 0) {
-    await admin.from("professional_services").insert(
-      serviceIds.map((serviceId) => ({
+    // Só vincula serviços que realmente pertencem à loja do profissional.
+    const { data: validServices } = await admin
+      .from("services")
+      .select("id")
+      .eq("shop_id", shopId)
+      .in("id", serviceIds);
+
+    const validIds = new Set((validServices ?? []).map((s) => s.id));
+    const rows = serviceIds
+      .filter((id) => validIds.has(id))
+      .map((serviceId) => ({
         professional_id: professionalId,
         service_id: serviceId,
-      }))
-    );
+      }));
+
+    if (rows.length > 0) {
+      await admin.from("professional_services").insert(rows);
+    }
   }
 }
 
 export async function createProfessional(
   formData: FormData
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const parsed = parseForm(formData);
   if (!parsed.success) {
@@ -186,9 +202,17 @@ export async function createProfessional(
     };
   }
 
+  await admin.from("profiles").upsert({
+    id: created.user.id,
+    full_name: `${data.firstName} ${data.lastName}`,
+    role: "barber",
+    shop_id: session.shopId,
+  });
+
   const { data: professional, error: insertError } = await admin
     .from("professionals")
     .insert({
+      shop_id: session.shopId,
       first_name: data.firstName,
       last_name: data.lastName,
       nickname: data.nickname,
@@ -218,16 +242,18 @@ export async function createProfessional(
       await admin
         .from("professionals")
         .update({ photo_url: url, photo_position: photoPosition })
-        .eq("id", professional.id);
+        .eq("id", professional.id)
+        .eq("shop_id", session.shopId);
     }
   } else {
     await admin
       .from("professionals")
       .update({ photo_position: photoPosition })
-      .eq("id", professional.id);
+      .eq("id", professional.id)
+      .eq("shop_id", session.shopId);
   }
 
-  await syncServices(professional.id, data.serviceIds);
+  await syncServices(professional.id, data.serviceIds, session.shopId);
   await syncSchedule(professional.id, schedule);
 
   revalidatePath("/admin/profissionais");
@@ -240,8 +266,8 @@ export async function updateProfessional(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const parsed = parseForm(formData);
   if (!parsed.success) {
@@ -260,6 +286,7 @@ export async function updateProfessional(
     .from("professionals")
     .select("profile_id, email")
     .eq("id", id)
+    .eq("shop_id", session.shopId)
     .single();
 
   if (!current) return { ok: false, error: "Profissional não encontrado." };
@@ -312,13 +339,14 @@ export async function updateProfessional(
   const { error: updateError } = await admin
     .from("professionals")
     .update(updates)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
 
   if (updateError) {
     return { ok: false, error: `Erro ao salvar: ${updateError.message}` };
   }
 
-  await syncServices(id, data.serviceIds);
+  await syncServices(id, data.serviceIds, session.shopId);
   await syncSchedule(id, schedule);
 
   revalidatePath("/admin/profissionais");
@@ -331,15 +359,16 @@ export async function setProfessionalActive(
   id: string,
   active: boolean
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
   const { error } = await admin
     .from("professionals")
     .update({ active })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
 
   if (error) return { ok: false, error: error.message };
 
@@ -349,16 +378,28 @@ export async function setProfessionalActive(
 }
 
 export async function deleteProfessional(id: string): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
 
+  const { data: professional } = await admin
+    .from("professionals")
+    .select("profile_id")
+    .eq("id", id)
+    .eq("shop_id", session.shopId)
+    .single();
+
+  if (!professional) {
+    return { ok: false, error: "Profissional não encontrado." };
+  }
+
   const { count } = await admin
     .from("appointments")
     .select("id", { count: "exact", head: true })
-    .eq("professional_id", id);
+    .eq("professional_id", id)
+    .eq("shop_id", session.shopId);
 
   if (count && count > 0) {
     return {
@@ -368,13 +409,11 @@ export async function deleteProfessional(id: string): Promise<ActionResult> {
     };
   }
 
-  const { data: professional } = await admin
+  const { error } = await admin
     .from("professionals")
-    .select("profile_id")
+    .delete()
     .eq("id", id)
-    .single();
-
-  const { error } = await admin.from("professionals").delete().eq("id", id);
+    .eq("shop_id", session.shopId);
   if (error) return { ok: false, error: error.message };
 
   if (professional?.profile_id) {

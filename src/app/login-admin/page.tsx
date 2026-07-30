@@ -15,6 +15,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   campos: "Preencha e-mail e senha para entrar.",
   perfil:
     "Este login não tem acesso ao painel. Fale com o dono da barbearia.",
+  inativa:
+    "Esta barbearia está desativada. O painel e a agenda pública ficam bloqueados até a plataforma reativar.",
   config:
     "O painel ainda não está ligado ao banco. Cadastre as variáveis do Supabase e reinicie o app.",
 };

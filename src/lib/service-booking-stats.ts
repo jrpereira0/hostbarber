@@ -1,13 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /** Quantas vezes cada serviço entrou em agendamentos normais (não cancelados). */
-export async function loadServiceBookingCounts(): Promise<Map<string, number>> {
+export async function loadServiceBookingCounts(
+  shopId: string
+): Promise<Map<string, number>> {
   const admin = createAdminClient();
-  if (!admin) return new Map();
+  if (!admin || !shopId) return new Map();
 
   const { data, error } = await admin
     .from("appointments")
     .select("appointment_services(service_id)")
+    .eq("shop_id", shopId)
     .neq("status", "cancelled")
     .eq("is_comanda_extra", false)
     .eq("is_squeeze_in", false);

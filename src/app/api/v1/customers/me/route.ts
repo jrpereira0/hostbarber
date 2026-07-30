@@ -6,34 +6,48 @@ import {
   getCustomerByWhatsapp,
   updateCustomerProfileByWhatsapp,
 } from "@/lib/lookup-customer";
+import { resolveShopIdFromRequest } from "@/lib/resolve-public-shop";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { uploadPublicPhoto } from "@/lib/upload-photo";
 import { normalizePhotoPosition } from "@/lib/photo-position";
+import type { ProtectedApiAuthContext } from "@/lib/protected-api-auth";
 
 const patchBodySchema = z.object({
   firstName: z.string().trim().min(1, "Informe o nome."),
-  lastName: z.string().trim().optional().default(""),
+  lastName: z.string().trim().min(1, "Informe o sobrenome."),
 });
 
-function requireClientWhatsapp(auth: { type: string; whatsapp?: string }) {
-  if (auth.type !== "client" || !auth.whatsapp) {
-    return null;
-  }
-  return auth.whatsapp;
+function requireClientAuth(auth: ProtectedApiAuthContext) {
+  if (auth.type !== "client") return null;
+  return auth;
+}
+
+async function resolveShopIdForClient(
+  request: NextRequest,
+  auth: ProtectedApiAuthContext
+): Promise<string | null> {
+  if (auth.type === "client") return auth.shopId;
+  const shopRef = await resolveShopIdFromRequest(request);
+  return shopRef?.shopId ?? null;
 }
 
 /**
- * GET /api/v1/customers/me
- * Perfil do cliente autenticado (Bearer OTP / cookie de sessão).
+ * GET /api/v1/customers/me?shop=slug
  */
 export async function GET(request: NextRequest) {
   return safeApiRoute(async () => {
+    const shopRef = await resolveShopIdFromRequest(request);
+
     return withProtectedApiRouteGuard(
       request,
-      { scope: "customers:read", rateLimit: "whatsappSensitive" },
+      {
+        scope: "customers:read",
+        rateLimit: "whatsappSensitive",
+        shopId: shopRef?.shopId,
+      },
       async ({ auth }) => {
-        const whatsapp = requireClientWhatsapp(auth);
-        if (!whatsapp) {
+        const client = requireClientAuth(auth);
+        if (!client) {
           return NextResponse.json(
             {
               ok: false,
@@ -43,7 +57,10 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        const result = await getCustomerByWhatsapp(whatsapp);
+        const result = await getCustomerByWhatsapp(
+          client.whatsapp,
+          client.shopId
+        );
         if (!result.ok) {
           return NextResponse.json(
             { ok: false, error: result.error },
@@ -78,25 +95,32 @@ async function parsePatchInput(request: NextRequest): Promise<
     try {
       form = await request.formData();
     } catch {
-      return { ok: false, error: "Corpo da requisição inválido.", status: 400 };
+      return { ok: false, error: "Formulário inválido.", status: 400 };
     }
 
     const firstName = String(form.get("firstName") ?? "").trim();
     const lastName = String(form.get("lastName") ?? "").trim();
+    const photo = form.get("photo");
+    const rawPosition = form.get("photoPosition");
+    const photoPosition =
+      typeof rawPosition === "string" && rawPosition.trim()
+        ? normalizePhotoPosition(rawPosition)
+        : null;
+
     if (!firstName) {
       return { ok: false, error: "Informe o nome.", status: 400 };
     }
+    if (!lastName) {
+      return { ok: false, error: "Informe o sobrenome.", status: 400 };
+    }
 
-    const photoRaw = form.get("photo");
-    const photo =
-      photoRaw instanceof File && photoRaw.size > 0 ? photoRaw : null;
-    const positionRaw = form.get("photoPosition");
-    const photoPosition =
-      typeof positionRaw === "string" && positionRaw.trim()
-        ? normalizePhotoPosition(positionRaw)
-        : null;
-
-    return { ok: true, firstName, lastName, photo, photoPosition };
+    return {
+      ok: true,
+      firstName,
+      lastName,
+      photo: photo instanceof File && photo.size > 0 ? photo : null,
+      photoPosition,
+    };
   }
 
   let json: unknown;
@@ -125,9 +149,7 @@ async function parsePatchInput(request: NextRequest): Promise<
 }
 
 /**
- * PATCH /api/v1/customers/me
- * Atualiza nome, sobrenome e foto do cliente autenticado.
- * Aceita JSON ou multipart (com foto). WhatsApp não muda.
+ * PATCH /api/v1/customers/me?shop=slug
  */
 export async function PATCH(request: NextRequest) {
   return safeApiRoute(async () => {
@@ -139,17 +161,31 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const shopRef = await resolveShopIdFromRequest(request);
+
     return withProtectedApiRouteGuard(
       request,
-      { scope: "customers:update", rateLimit: "whatsappSensitive" },
+      {
+        scope: "customers:update",
+        rateLimit: "whatsappSensitive",
+        shopId: shopRef?.shopId,
+      },
       async ({ auth }) => {
-        const whatsapp = requireClientWhatsapp(auth);
-        if (!whatsapp) {
+        const client = requireClientAuth(auth);
+        if (!client) {
           return NextResponse.json(
             {
               ok: false,
               error: "Confirme o WhatsApp pra acessar seus dados.",
             },
+            { status: 403 }
+          );
+        }
+
+        const shopId = await resolveShopIdForClient(request, auth);
+        if (!shopId || shopId !== client.shopId) {
+          return NextResponse.json(
+            { ok: false, error: "Barbearia inválida para esta sessão." },
             { status: 403 }
           );
         }
@@ -166,9 +202,9 @@ export async function PATCH(request: NextRequest) {
             );
           }
 
-          // Garante o registro (ou atualiza nome) antes do upload, pra ter id estável.
           const base = await updateCustomerProfileByWhatsapp({
-            whatsapp,
+            whatsapp: client.whatsapp,
+            shopId,
             firstName: parsed.firstName,
             lastName: parsed.lastName,
             photoPosition: photoPosition ?? undefined,
@@ -195,7 +231,8 @@ export async function PATCH(request: NextRequest) {
 
           photoUrl = uploaded.url;
           const withPhoto = await updateCustomerProfileByWhatsapp({
-            whatsapp,
+            whatsapp: client.whatsapp,
+            shopId,
             firstName: parsed.firstName,
             lastName: parsed.lastName,
             photoUrl,
@@ -215,7 +252,8 @@ export async function PATCH(request: NextRequest) {
         }
 
         const result = await updateCustomerProfileByWhatsapp({
-          whatsapp,
+          whatsapp: client.whatsapp,
+          shopId,
           firstName: parsed.firstName,
           lastName: parsed.lastName,
           photoPosition: photoPosition ?? undefined,

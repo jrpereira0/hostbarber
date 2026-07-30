@@ -13,6 +13,7 @@ export type CommissionPayout = {
 /** Histórico de repasses registrados para um barbeiro (mais recentes primeiro). */
 export async function listProfessionalCommissionPayouts(
   admin: SupabaseClient,
+  shopId: string,
   professionalId: string,
   limit = 50
 ): Promise<CommissionPayout[]> {
@@ -21,6 +22,7 @@ export async function listProfessionalCommissionPayouts(
     .select(
       "id, professional_id, period_from, period_to, amount_cents, paid_at"
     )
+    .eq("shop_id", shopId)
     .eq("professional_id", professionalId)
     .order("paid_at", { ascending: false })
     .limit(limit);
@@ -88,13 +90,14 @@ type PayCommissionResult =
 export async function payProfessionalCommission(
   admin: SupabaseClient,
   input: {
+    shopId: string;
     professionalId: string;
     from: string;
     to: string;
     paidBy: string;
   }
 ): Promise<PayCommissionResult> {
-  const { professionalId, from, to, paidBy } = input;
+  const { shopId, professionalId, from, to, paidBy } = input;
 
   const { data: comandaRows, error: loadError } = await admin
     .from("comandas")
@@ -112,6 +115,7 @@ export async function payProfessionalCommission(
       )
     `
     )
+    .eq("shop_id", shopId)
     .eq("status", "closed")
     .gte("service_date", from)
     .lte("service_date", to);
@@ -186,6 +190,7 @@ export async function payProfessionalCommission(
   const { data: payoutRow, error: payoutError } = await admin
     .from("commission_payouts")
     .insert({
+      shop_id: shopId,
       professional_id: professionalId,
       period_from: from,
       period_to: to,

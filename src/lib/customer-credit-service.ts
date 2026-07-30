@@ -95,11 +95,13 @@ export async function getCustomerCreditBalance(
 
 export async function getCustomerCreditBalanceByWhatsapp(
   admin: SupabaseClient,
+  shopId: string,
   whatsapp: string
 ): Promise<number> {
   const { data } = await admin
     .from("customers")
     .select("credit_balance_cents")
+    .eq("shop_id", shopId)
     .eq("whatsapp", whatsapp)
     .maybeSingle();
 
@@ -108,11 +110,13 @@ export async function getCustomerCreditBalanceByWhatsapp(
 
 export async function resolveCustomerIdByWhatsapp(
   admin: SupabaseClient,
+  shopId: string,
   whatsapp: string
 ): Promise<string | null> {
   const { data } = await admin
     .from("customers")
     .select("id")
+    .eq("shop_id", shopId)
     .eq("whatsapp", whatsapp)
     .maybeSingle();
 

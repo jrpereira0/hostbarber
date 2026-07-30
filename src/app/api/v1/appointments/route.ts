@@ -14,6 +14,8 @@ import {
   WHATSAPP_INVALID_MESSAGE,
   whatsappSchema,
 } from "@/lib/whatsapp";
+import { resolveShopIdFromRequest } from "@/lib/resolve-public-shop";
+import { bookingPathForSlug } from "@/lib/booking-path";
 
 const listQuerySchema = z.object({
   mode: z.enum(LIST_APPOINTMENTS_MODES).default("upcoming"),
@@ -31,7 +33,7 @@ const bodySchema = z
       .array(z.uuid("serviceIds contém um id inválido."))
       .min(1, "Informe ao menos um serviço."),
     firstName: z.string().trim().min(1, "Informe o nome."),
-    lastName: z.string().trim().optional().default(""),
+    lastName: z.string().trim().min(1, "Informe o sobrenome."),
     whatsapp: whatsappSchema,
   })
   .superRefine((data, ctx) => {
@@ -70,16 +72,31 @@ export async function GET(request: NextRequest) {
     }
     const mode: ListAppointmentsMode = parsedMode.data.mode;
 
+    const shopRef = await resolveShopIdFromRequest(request);
+    if (!shopRef) {
+      return NextResponse.json(
+        { ok: false, error: "Informe a barbearia (?shop=slug)." },
+        { status: 400 }
+      );
+    }
+
     return withProtectedApiRouteGuard(
       request,
       {
         scope: "appointments:read",
         rateLimit: "whatsappSensitive",
         whatsapp,
+        shopId: shopRef.shopId,
       },
-      async () => {
+      async ({ auth }) => {
+        const shopId =
+          auth.type === "client" || auth.type === "admin"
+            ? auth.shopId
+            : shopRef.shopId;
+
         const result = await listPublicAppointmentsByWhatsapp(whatsapp, {
           mode,
+          shopId,
         });
 
         if (!result.ok) {
@@ -99,7 +116,7 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// POST /api/v1/appointments — site exige sessão OTP; n8n usa chave de API
+// POST /api/v1/appointments — site exige sessão do cliente (WhatsApp)
 export async function POST(request: NextRequest) {
   return safeApiRoute(async () => {
     let json: unknown;
@@ -139,16 +156,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const shopRef = await resolveShopIdFromRequest(request);
+    const shopFromBody =
+      typeof raw.shop === "string" ? raw.shop.trim().toLowerCase() : "";
+    let shopId = shopRef?.shopId ?? null;
+    let shopSlug = shopRef?.slug ?? shopFromBody;
+
+    if (!shopId && shopFromBody) {
+      const { resolveShopIdFromSlug } = await import(
+        "@/lib/resolve-public-shop"
+      );
+      const resolved = await resolveShopIdFromSlug(shopFromBody);
+      shopId = resolved?.shopId ?? null;
+      shopSlug = resolved?.slug ?? shopFromBody;
+    }
+
+    if (!shopId) {
+      return NextResponse.json(
+        { error: "Informe a barbearia (shop)." },
+        { status: 400 }
+      );
+    }
+
     return withProtectedApiRouteGuard(
       request,
       {
         scope: "appointments:create",
         rateLimit: "appointmentCreateIp",
         whatsapp: parsed.data.whatsapp,
+        shopId,
       },
       async ({ auth }) => {
+        const expectedShopId =
+          auth.type === "client" || auth.type === "admin"
+            ? auth.shopId
+            : shopId!;
+
         const result = await createPublicAppointment(parsed.data, {
-          bookingSource: auth.type === "api_key" ? "ai" : "site",
+          bookingSource: "site",
+          expectedShopId,
         });
 
         if (!result.ok) {
@@ -161,6 +207,9 @@ export async function POST(request: NextRequest) {
         after(() => {
           revalidatePath("/admin");
           revalidatePath("/agenda");
+          if (shopSlug) {
+            revalidatePath(bookingPathForSlug(shopSlug));
+          }
         });
         return NextResponse.json({
           ok: true,

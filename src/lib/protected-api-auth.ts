@@ -1,34 +1,34 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { type ApiScope } from "@/lib/api-key-scopes";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { type ApiScope } from "@/lib/api-scopes";
 import {
   apiForbiddenResponse,
   apiUnauthorizedResponse,
   getAuthorizationHeader,
-  validateApiKeyFromRequest,
-  type ApiKeyAuthContext,
-} from "@/lib/api-key-auth";
-import { parseBearerApiKey } from "@/lib/api-key-crypto";
+} from "@/lib/api-auth";
 import {
   extractBearerToken,
   readClientSessionFromRequest,
   verifyClientSessionToken,
 } from "@/lib/client-api-session";
+import { isShopActive } from "@/lib/shops/queries";
 import { normalizeWhatsapp } from "@/lib/whatsapp";
 
 export type AdminApiAuthContext = {
   type: "admin";
   userId: string;
   role: "owner" | "barber";
+  shopId: string;
 };
 
 export type ClientApiAuthContext = {
   type: "client";
   whatsapp: string;
+  shopId: string;
 };
 
 export type ProtectedApiAuthContext =
-  | ApiKeyAuthContext
   | AdminApiAuthContext
   | ClientApiAuthContext;
 
@@ -41,10 +41,6 @@ const CLIENT_SESSION_SCOPES: ApiScope[] = [
   "appointments:cancel",
 ];
 
-// Escopos liberados para barbeiro autenticado com sessão do painel (cookie).
-// Não inclui "customers:read" nem "appointments:read": essas rotas devolvem
-// dados de QUALQUER WhatsApp informado, sem restringir ao próprio barbeiro,
-// então um barbeiro logado poderia ler clientes/agendamentos de terceiros.
 const BARBER_SESSION_SCOPES: ApiScope[] = [
   "catalog:read",
   "availability:read",
@@ -61,17 +57,21 @@ function clientHasScope(scope: ApiScope): boolean {
 
 function buildClientAuth(
   whatsapp: string,
+  shopId: string,
   requiredScope: ApiScope,
-  requestedWhatsapp?: string | null
+  requestedWhatsapp?: string | null,
+  expectedShopId?: string | null
 ): ClientApiAuthContext | null {
   if (!clientHasScope(requiredScope)) return null;
+
+  if (expectedShopId && expectedShopId !== shopId) return null;
 
   if (requestedWhatsapp) {
     const requested = normalizeWhatsapp(requestedWhatsapp);
     if (!requested || requested !== whatsapp) return null;
   }
 
-  return { type: "client", whatsapp };
+  return { type: "client", whatsapp, shopId };
 }
 
 export async function getAdminApiSession(): Promise<AdminApiAuthContext | null> {
@@ -86,25 +86,42 @@ export async function getAdminApiSession(): Promise<AdminApiAuthContext | null> 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, shop_id")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profile?.role !== "owner" && profile?.role !== "barber") {
+  if (
+    (profile?.role !== "owner" && profile?.role !== "barber") ||
+    !profile.shop_id
+  ) {
     return null;
   }
+
+  const active = await isShopActive(supabase, profile.shop_id);
+  if (!active) return null;
 
   return {
     type: "admin",
     userId: user.id,
     role: profile.role,
+    shopId: profile.shop_id as string,
   };
 }
 
 export type ProtectedAuthOptions = {
   /** WhatsApp da requisição — obrigatório para sessão de cliente. */
   whatsapp?: string | null;
+  /** Loja esperada (slug resolvido). Cliente só autentica na mesma loja. */
+  shopId?: string | null;
 };
+
+async function assertClientShopActive(
+  shopId: string
+): Promise<boolean> {
+  const admin = createAdminClient();
+  if (!admin) return false;
+  return isShopActive(admin, shopId);
+}
 
 export async function resolveProtectedApiAuth(
   request: Request,
@@ -121,23 +138,18 @@ export async function resolveProtectedApiAuth(
       return { ok: false, response: apiUnauthorizedResponse() };
     }
 
-    // Chave de API (n8n / integrações)
-    if (parseBearerApiKey(authorization)) {
-      const apiKey = await validateApiKeyFromRequest(request, requiredScope);
-      if (!apiKey.ok) {
-        return apiKey;
-      }
-      return { ok: true, auth: apiKey.auth };
-    }
-
-    // Token de sessão do cliente (app mobile)
     const bearer = extractBearerToken(request);
     const bearerSession = verifyClientSessionToken(bearer);
     if (bearerSession) {
+      if (!(await assertClientShopActive(bearerSession.shopId))) {
+        return { ok: false, response: apiForbiddenResponse() };
+      }
       const clientAuth = buildClientAuth(
         bearerSession.whatsapp,
+        bearerSession.shopId,
         requiredScope,
-        options.whatsapp
+        options.whatsapp,
+        options.shopId
       );
       if (clientAuth) {
         return { ok: true, auth: clientAuth };
@@ -149,23 +161,29 @@ export async function resolveProtectedApiAuth(
   }
 
   const clientSession = readClientSessionFromRequest(request);
+  if (clientSession && !(await assertClientShopActive(clientSession.shopId))) {
+    return { ok: false, response: apiForbiddenResponse() };
+  }
+
   const clientAuth = clientSession
     ? buildClientAuth(
         clientSession.whatsapp,
+        clientSession.shopId,
         requiredScope,
-        options.whatsapp
+        options.whatsapp,
+        options.shopId
       )
     : null;
 
-  // Sessão OTP do cliente (cookie do site /agenda) tem prioridade sobre o
-  // login do painel no mesmo navegador. Sem isso, /customers/me e Conta
-  // quebram quando o dono testa o site logado no admin.
   if (clientAuth) {
     return { ok: true, auth: clientAuth };
   }
 
   const admin = await getAdminApiSession();
   if (admin && adminHasScope(admin.role, requiredScope)) {
+    if (options.shopId && options.shopId !== admin.shopId) {
+      return { ok: false, response: apiForbiddenResponse() };
+    }
     return { ok: true, auth: admin };
   }
 
@@ -177,7 +195,7 @@ export async function resolveProtectedApiAuth(
     return { ok: false, response: apiForbiddenResponse() };
   }
 
-  if (clientSession && options.whatsapp) {
+  if (clientSession && (options.whatsapp || options.shopId)) {
     return { ok: false, response: apiForbiddenResponse() };
   }
 
@@ -187,8 +205,9 @@ export async function resolveProtectedApiAuth(
 export function protectedAuthRateLimitKey(
   auth: ProtectedApiAuthContext
 ): string | undefined {
-  if (auth.type === "api_key") return auth.keyUuid;
-  if (auth.type === "client") return `client:${auth.whatsapp}`;
+  if (auth.type === "client") {
+    return `client:${auth.shopId}:${auth.whatsapp}`;
+  }
   if (auth.type === "admin") return `admin:${auth.userId}`;
   return undefined;
 }

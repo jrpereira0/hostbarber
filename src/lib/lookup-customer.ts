@@ -57,11 +57,15 @@ function mapCustomerRow(
 }
 
 export async function getCustomerByWhatsapp(
-  rawWhatsapp: string
+  rawWhatsapp: string,
+  shopId: string
 ): Promise<CustomerByWhatsappResult> {
   const whatsapp = normalizeWhatsapp(rawWhatsapp);
   if (!whatsapp) {
     return { ok: false, error: "WhatsApp inválido.", httpStatus: 400 };
+  }
+  if (!shopId.trim()) {
+    return { ok: false, error: "Barbearia não encontrada.", httpStatus: 400 };
   }
 
   const admin = createAdminClient();
@@ -78,6 +82,7 @@ export async function getCustomerByWhatsapp(
     .select(
       "id, first_name, last_name, credit_balance_cents, photo_url, photo_position"
     )
+    .eq("shop_id", shopId)
     .in("whatsapp", whatsappLookupKeys(whatsapp))
     .limit(1)
     .maybeSingle();
@@ -102,9 +107,10 @@ export async function getCustomerByWhatsapp(
 }
 
 export async function lookupCustomerByWhatsapp(
-  whatsapp: string
+  whatsapp: string,
+  shopId: string
 ): Promise<CustomerLookupResult> {
-  const result = await getCustomerByWhatsapp(whatsapp);
+  const result = await getCustomerByWhatsapp(whatsapp, shopId);
   if (!result.ok || !result.found) {
     return { found: false };
   }
@@ -126,6 +132,7 @@ export type UpdateCustomerProfileResult =
  */
 export async function updateCustomerProfileByWhatsapp(input: {
   whatsapp: string;
+  shopId: string;
   firstName: string;
   lastName: string;
   photoUrl?: string | null;
@@ -134,6 +141,9 @@ export async function updateCustomerProfileByWhatsapp(input: {
   const whatsapp = normalizeWhatsapp(input.whatsapp);
   if (!whatsapp) {
     return { ok: false, error: "WhatsApp inválido.", httpStatus: 400 };
+  }
+  if (!input.shopId.trim()) {
+    return { ok: false, error: "Barbearia não encontrada.", httpStatus: 400 };
   }
 
   const firstName = capitalizePersonName(input.firstName);
@@ -161,6 +171,7 @@ export async function updateCustomerProfileByWhatsapp(input: {
   const { data: existing, error: lookupError } = await admin
     .from("customers")
     .select("id, credit_balance_cents, photo_url, photo_position")
+    .eq("shop_id", input.shopId)
     .in("whatsapp", whatsappLookupKeys(whatsapp))
     .limit(1)
     .maybeSingle();
@@ -218,6 +229,7 @@ export async function updateCustomerProfileByWhatsapp(input: {
   }
 
   const insertRow: Record<string, unknown> = {
+    shop_id: input.shopId,
     first_name: firstName,
     last_name: lastName,
     whatsapp,

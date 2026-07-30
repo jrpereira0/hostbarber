@@ -73,6 +73,7 @@ export default async function CustomersPage() {
       appointments (date, status)
     `
     )
+    .eq("shop_id", session.shopId)
     .order("first_name")
     .order("last_name");
 

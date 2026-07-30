@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireServerClient } from "@/lib/supabase/server";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { PageHeader } from "@/components/admin/page-header";
 import { AdminFormPage } from "@/components/admin/admin-form-layout";
 import { ProductForm } from "@/components/admin/product-form";
@@ -15,7 +16,9 @@ type PageProps = {
 };
 
 export default async function EditProductPage({ params }: PageProps) {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const { id } = await params;
   const supabase = await requireServerClient();
@@ -27,10 +30,12 @@ export default async function EditProductPage({ params }: PageProps) {
         "id, name, description, category_id, price_cents, commission_percent, stock_quantity, photo_url, photo_position"
       )
       .eq("id", id)
+      .eq("shop_id", session.shopId)
       .maybeSingle(),
     supabase
       .from("product_categories")
       .select("id, name")
+      .eq("shop_id", session.shopId)
       .eq("active", true)
       .order("sort_order")
       .order("name"),

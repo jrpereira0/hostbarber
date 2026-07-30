@@ -33,6 +33,7 @@ export async function applyProductStockDelta(
   admin: SupabaseClient,
   params: {
     productId: string;
+    shopId: string;
     delta: number;
     reason: StockMovementReason;
     comandaId?: string | null;
@@ -48,6 +49,7 @@ export async function applyProductStockDelta(
     .from("products")
     .select("id, name, stock_quantity")
     .eq("id", params.productId)
+    .eq("shop_id", params.shopId)
     .maybeSingle();
 
   if (!product) {

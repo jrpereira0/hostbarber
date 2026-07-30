@@ -12,7 +12,8 @@ export type EligibleProfessional = {
 
 /** Profissionais ativos que fazem todos os serviços pedidos. */
 export async function listEligibleProfessionals(
-  serviceIds: string[]
+  serviceIds: string[],
+  shopId: string
 ): Promise<
   | { ok: true; professionals: EligibleProfessional[] }
   | { ok: false; error: string; status: number }
@@ -21,6 +22,13 @@ export async function listEligibleProfessionals(
     return {
       ok: false,
       error: "Escolha pelo menos um serviço.",
+      status: 400,
+    };
+  }
+  if (!shopId.trim()) {
+    return {
+      ok: false,
+      error: "Barbearia não encontrada.",
       status: 400,
     };
   }
@@ -33,6 +41,7 @@ export async function listEligibleProfessionals(
   const { data: pros, error } = await admin
     .from("professionals")
     .select("id, nickname, professional_services ( service_id )")
+    .eq("shop_id", shopId)
     .eq("active", true)
     .order("nickname");
 
@@ -100,9 +109,10 @@ export async function countDayAppointmentsByProfessional(
 export async function getAnyProfessionalAvailability(
   date: string,
   serviceIds: string[],
-  excludeAppointmentId?: string
+  options?: { excludeAppointmentId?: string; shopId: string }
 ): Promise<AvailabilityResult> {
-  const eligible = await listEligibleProfessionals(serviceIds);
+  const shopId = options?.shopId ?? "";
+  const eligible = await listEligibleProfessionals(serviceIds, shopId);
   if (!eligible.ok) return eligible;
 
   if (eligible.professionals.length === 0) {
@@ -115,7 +125,12 @@ export async function getAnyProfessionalAvailability(
 
   const results = await Promise.all(
     eligible.professionals.map((pro) =>
-      getAvailability(pro.id, date, serviceIds, excludeAppointmentId)
+      getAvailability(
+        pro.id,
+        date,
+        serviceIds,
+        options?.excludeAppointmentId
+      )
     )
   );
 
@@ -182,7 +197,7 @@ export async function pickLeastBusyProfessionalForSlot(
   date: string,
   startTime: string,
   serviceIds: string[],
-  options: { excludeProfessionalIds?: string[] } = {}
+  options: { excludeProfessionalIds?: string[]; shopId: string }
 ): Promise<
   | {
       ok: true;
@@ -192,7 +207,7 @@ export async function pickLeastBusyProfessionalForSlot(
     }
   | { ok: false; error: string; status: number }
 > {
-  const eligible = await listEligibleProfessionals(serviceIds);
+  const eligible = await listEligibleProfessionals(serviceIds, options.shopId);
   if (!eligible.ok) return eligible;
 
   const excluded = new Set(options.excludeProfessionalIds ?? []);

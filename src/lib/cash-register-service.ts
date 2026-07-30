@@ -53,6 +53,7 @@ async function loadProfileNames(
 
 async function enrichSessions(
   admin: SupabaseClient,
+  shopId: string,
   rows: DbSessionRow[]
 ): Promise<CashRegisterSession[]> {
   const names = await loadProfileNames(
@@ -62,7 +63,7 @@ async function enrichSessions(
 
   return Promise.all(
     rows.map(async (row) => {
-      const summary = await getCashRegisterSummary(admin, row.service_date, {
+      const summary = await getCashRegisterSummary(admin, shopId, row.service_date, {
         cashRegisterSessionId: row.id,
       });
       return {
@@ -87,14 +88,16 @@ async function enrichSessions(
 
 async function enrichSession(
   admin: SupabaseClient,
+  shopId: string,
   row: DbSessionRow
 ): Promise<CashRegisterSession> {
-  const [session] = await enrichSessions(admin, [row]);
+  const [session] = await enrichSessions(admin, shopId, [row]);
   return session;
 }
 
 export async function getCashRegisterSession(
   admin: SupabaseClient,
+  shopId: string,
   serviceDate: string
 ): Promise<CashRegisterSession | null> {
   const { data } = await admin
@@ -102,11 +105,12 @@ export async function getCashRegisterSession(
     .select(
       "id, service_date, status, opening_balance_cents, responsible_name, opened_at, closed_at, opened_by, closed_by"
     )
+    .eq("shop_id", shopId)
     .eq("service_date", serviceDate)
     .maybeSingle();
 
   if (!data) return null;
-  return enrichSession(admin, data as DbSessionRow);
+  return enrichSession(admin, shopId, data as DbSessionRow);
 }
 
 export type OpenCashRegisterBasic = {
@@ -116,11 +120,13 @@ export type OpenCashRegisterBasic = {
 
 /** Caixa aberto sem totais do dia (rápido — só checagem de data). */
 export async function getOpenCashRegisterSessionBasic(
-  admin: SupabaseClient
+  admin: SupabaseClient,
+  shopId: string
 ): Promise<OpenCashRegisterBasic | null> {
   const { data } = await admin
     .from("cash_register_sessions")
     .select("id, service_date")
+    .eq("shop_id", shopId)
     .eq("status", "open")
     .limit(1)
     .maybeSingle();
@@ -129,28 +135,31 @@ export async function getOpenCashRegisterSessionBasic(
   return { id: data.id, serviceDate: data.service_date };
 }
 
-/** Retorna o único caixa aberto no sistema, se existir. */
+/** Retorna o único caixa aberto da loja, se existir. */
 export async function getOpenCashRegisterSession(
-  admin: SupabaseClient
+  admin: SupabaseClient,
+  shopId: string
 ): Promise<CashRegisterSession | null> {
   const { data } = await admin
     .from("cash_register_sessions")
     .select(
       "id, service_date, status, opening_balance_cents, responsible_name, opened_at, closed_at, opened_by, closed_by"
     )
+    .eq("shop_id", shopId)
     .eq("status", "open")
     .limit(1)
     .maybeSingle();
 
   if (!data) return null;
-  return enrichSession(admin, data as DbSessionRow);
+  return enrichSession(admin, shopId, data as DbSessionRow);
 }
 
 async function assertNoOtherOpenCashRegister(
   admin: SupabaseClient,
+  shopId: string,
   serviceDate: string
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const openElsewhere = await getOpenCashRegisterSession(admin);
+  const openElsewhere = await getOpenCashRegisterSession(admin, shopId);
   if (openElsewhere && openElsewhere.serviceDate !== serviceDate) {
     return {
       ok: false,
@@ -163,6 +172,7 @@ async function assertNoOtherOpenCashRegister(
 
 export async function listCashRegisterSessions(
   admin: SupabaseClient,
+  shopId: string,
   from: string,
   to: string
 ): Promise<CashRegisterSession[]> {
@@ -171,12 +181,13 @@ export async function listCashRegisterSessions(
     .select(
       "id, service_date, status, opening_balance_cents, responsible_name, opened_at, closed_at, opened_by, closed_by"
     )
+    .eq("shop_id", shopId)
     .gte("service_date", from)
     .lte("service_date", to)
     .order("service_date", { ascending: false });
 
   const rows = (data ?? []) as DbSessionRow[];
-  return enrichSessions(admin, rows);
+  return enrichSessions(admin, shopId, rows);
 }
 
 function parseUserId(userId: string): string | null {
@@ -196,12 +207,13 @@ export type ComandaCashRegisterCheck =
   | { ok: true; sessionId: string; serviceDate: string }
   | { ok: false; error: string; status: number };
 
-/** Comanda só fecha se houver caixa aberto e for do mesmo dia do caixa. */
+/** Comanda só fecha se houver caixa aberto (da mesma loja) e for do mesmo dia do caixa. */
 export async function assertComandaClosableInOpenCashRegister(
   admin: SupabaseClient,
+  shopId: string,
   comandaServiceDate: string
 ): Promise<ComandaCashRegisterCheck> {
-  const openSession = await getOpenCashRegisterSessionBasic(admin);
+  const openSession = await getOpenCashRegisterSessionBasic(admin, shopId);
 
   if (!openSession) {
     return {
@@ -228,18 +240,20 @@ export async function assertComandaClosableInOpenCashRegister(
 
 export async function canCloseComandaInOpenCashRegister(
   admin: SupabaseClient,
+  shopId: string,
   comandaServiceDate: string,
   openSession?: OpenCashRegisterBasic | null
 ): Promise<boolean> {
   const session =
     openSession === undefined
-      ? await getOpenCashRegisterSessionBasic(admin)
+      ? await getOpenCashRegisterSessionBasic(admin, shopId)
       : openSession;
   return session !== null && session.serviceDate === comandaServiceDate;
 }
 
 export async function openCashRegister(
   admin: SupabaseClient,
+  shopId: string,
   serviceDate: string,
   userId: string,
   input: OpenCashRegisterInput
@@ -263,7 +277,7 @@ export async function openCashRegister(
     };
   }
 
-  const existing = await getCashRegisterSession(admin, serviceDate);
+  const existing = await getCashRegisterSession(admin, shopId, serviceDate);
   const now = new Date().toISOString();
   const openedBy = parseUserId(userId);
 
@@ -271,7 +285,7 @@ export async function openCashRegister(
     return { ok: false, error: "O caixa deste dia já está aberto.", status: 409 };
   }
 
-  const noOtherOpen = await assertNoOtherOpenCashRegister(admin, serviceDate);
+  const noOtherOpen = await assertNoOtherOpenCashRegister(admin, shopId, serviceDate);
   if (!noOtherOpen.ok) return noOtherOpen;
 
   const payload = {
@@ -289,13 +303,15 @@ export async function openCashRegister(
     const { error } = await admin
       .from("cash_register_sessions")
       .update(payload)
-      .eq("id", existing.id);
+      .eq("id", existing.id)
+      .eq("shop_id", shopId);
 
     if (error) {
       return { ok: false, error: "Não foi possível abrir o caixa.", status: 500 };
     }
   } else {
     const { error } = await admin.from("cash_register_sessions").insert({
+      shop_id: shopId,
       service_date: serviceDate,
       ...payload,
     });
@@ -305,7 +321,7 @@ export async function openCashRegister(
     }
   }
 
-  const session = await getCashRegisterSession(admin, serviceDate);
+  const session = await getCashRegisterSession(admin, shopId, serviceDate);
   if (!session) {
     return { ok: false, error: "Não foi possível abrir o caixa.", status: 500 };
   }
@@ -315,12 +331,13 @@ export async function openCashRegister(
 
 export async function closeCashRegister(
   admin: SupabaseClient,
+  shopId: string,
   serviceDate: string,
   userId: string
 ): Promise<
   { ok: true; session: CashRegisterSession } | { ok: false; error: string; status: number }
 > {
-  const existing = await getCashRegisterSession(admin, serviceDate);
+  const existing = await getCashRegisterSession(admin, shopId, serviceDate);
 
   if (!existing || existing.status !== "open") {
     return {
@@ -330,7 +347,7 @@ export async function closeCashRegister(
     };
   }
 
-  const openCount = await countOpenComandasWithItems(admin, serviceDate);
+  const openCount = await countOpenComandasWithItems(admin, shopId, serviceDate);
   if (openCount > 0) {
     return {
       ok: false,
@@ -353,13 +370,14 @@ export async function closeCashRegister(
       closed_by: closedBy,
       updated_at: now,
     })
-    .eq("id", existing.id);
+    .eq("id", existing.id)
+    .eq("shop_id", shopId);
 
   if (error) {
     return { ok: false, error: "Não foi possível fechar o caixa.", status: 500 };
   }
 
-  const session = await getCashRegisterSession(admin, serviceDate);
+  const session = await getCashRegisterSession(admin, shopId, serviceDate);
   if (!session) {
     return { ok: false, error: "Não foi possível fechar o caixa.", status: 500 };
   }
@@ -369,21 +387,22 @@ export async function closeCashRegister(
 
 export async function reopenCashRegister(
   admin: SupabaseClient,
+  shopId: string,
   serviceDate: string,
   userId: string,
   input: OpenCashRegisterInput
 ): Promise<
   { ok: true; session: CashRegisterSession } | { ok: false; error: string; status: number }
 > {
-  const existing = await getCashRegisterSession(admin, serviceDate);
+  const existing = await getCashRegisterSession(admin, shopId, serviceDate);
 
   if (!existing) {
-    return openCashRegister(admin, serviceDate, userId, input);
+    return openCashRegister(admin, shopId, serviceDate, userId, input);
   }
 
   if (existing.status === "open") {
     return { ok: false, error: "O caixa deste dia já está aberto.", status: 409 };
   }
 
-  return openCashRegister(admin, serviceDate, userId, input);
+  return openCashRegister(admin, shopId, serviceDate, userId, input);
 }

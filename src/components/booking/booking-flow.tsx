@@ -35,6 +35,7 @@ import { normalizeWhatsapp, whatsappLookupDelayMs } from "@/lib/whatsapp";
 import { SlotGridSkeleton } from "@/components/skeletons/slot-grid-skeleton";
 import { cn } from "@/lib/utils";
 import type { PublicService, ShopCatalog } from "@/lib/get-shop-catalog";
+import { withShopQuery } from "@/lib/booking-path";
 
 type Step = "professional" | "services" | "datetime" | "confirm";
 
@@ -57,7 +58,7 @@ const stepMeta: Record<Step, { title: string; hint: string }> = {
   },
   confirm: {
     title: "Seus dados",
-    hint: "Confirme o WhatsApp com o código e finalize.",
+    hint: "Informe o WhatsApp e finalize.",
   },
 };
 
@@ -232,6 +233,7 @@ function SlotGroups({
 }
 
 export function BookingFlow({ catalog, today }: BookingFlowProps) {
+  const shopSlug = catalog.shop.slug;
   const maxDate = addDays(today, MAX_DAYS_AHEAD);
   const minDate = useMemo(
     () =>
@@ -316,7 +318,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
     if (lookupDone) {
       return {
         title: "Confirmar agendamento",
-        hint: "Complete seu nome pra finalizar.",
+        hint: "Complete nome e sobrenome pra finalizar.",
       };
     }
     return stepMeta.confirm;
@@ -386,7 +388,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
         params.set("professionalId", professionalId);
       }
 
-      fetch(`/api/v1/appointments/availability?${params}`)
+      fetch(withShopQuery(`/api/v1/appointments/availability?${params}`, shopSlug))
         .then(async (res) => {
           const body = await res.json();
           if (cancelled) return;
@@ -419,7 +421,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [step, professionalId, anyPreference, serviceIds, date]);
+  }, [step, professionalId, anyPreference, serviceIds, date, shopSlug]);
 
   useEffect(() => {
     if (step !== "confirm" || !whatsappVerified) return;
@@ -446,7 +448,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
       setLookupDone(false);
       setCustomerFound(false);
 
-      fetch("/api/v1/customers/me", { credentials: "include" })
+      fetch(withShopQuery("/api/v1/customers/me", shopSlug), { credentials: "include" })
         .then(async (res) => {
           const body = await res.json();
           if (cancelled) return;
@@ -483,7 +485,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [whatsapp, step, whatsappVerified]);
+  }, [whatsapp, step, whatsappVerified, shopSlug]);
 
   const handleWhatsappAuthenticated = useCallback((canonical: string) => {
     setWhatsapp(formatWhatsapp(canonical));
@@ -579,14 +581,14 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
 
   async function handleConfirm() {
     const digits = normalizeWhatsapp(whatsapp);
-    if (!firstName.trim() || !digits || !startTime) {
-      toast.error("Preencha o nome e confirme o WhatsApp.");
+    if (!firstName.trim() || !lastName.trim() || !digits || !startTime) {
+      toast.error("Preencha nome, sobrenome e confirme o WhatsApp.");
       return;
     }
 
     setSaving(true);
     try {
-      const res = await fetch("/api/v1/appointments", {
+      const res = await fetch(withShopQuery("/api/v1/appointments", shopSlug), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -659,7 +661,8 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
         lookupLoading ||
         !lookupDone ||
         !normalizeWhatsapp(whatsapp) ||
-        !firstName.trim()));
+        !firstName.trim() ||
+        !lastName.trim()));
 
   if (confirmation) {
     const confirmedProfessional = catalog.professionals.find(
@@ -1040,8 +1043,9 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
           <div className="flex flex-col gap-4">
             {!whatsappVerified ? (
               <ClientWhatsappAuth
+              shopSlug={shopSlug}
                 onAuthenticated={handleWhatsappAuthenticated}
-                hint="Enviamos um código no WhatsApp. Com ele você confirma o horário e fica logado neste aparelho."
+                hint="Informe seu WhatsApp pra confirmar o horário. Se já tiver cadastro, usamos seus dados."
               />
             ) : (
               <>
@@ -1053,7 +1057,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
                   </div>
                 ) : null}
 
-                {customerFound ? (
+                {customerFound && firstName.trim() && lastName.trim() ? (
                   <div className="rounded-2xl bg-[#151618] px-4 py-4 ring-1 ring-white/8">
                     <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                       Cliente
@@ -1079,7 +1083,8 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
                   </div>
                 ) : null}
 
-                {lookupDone && !customerFound ? (
+                {lookupDone &&
+                !(customerFound && firstName.trim() && lastName.trim()) ? (
                   <div className="rounded-2xl bg-[#151618] px-4 py-4 ring-1 ring-white/8">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1102,8 +1107,9 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
                     <div className="my-4 h-px bg-white/8" />
 
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Primeiro agendamento neste número. Informe seu nome.
-                      Sobrenome é opcional.
+                      {customerFound
+                        ? "Complete seu nome e sobrenome pra finalizar."
+                        : "Primeiro agendamento neste número. Informe nome e sobrenome."}
                     </p>
 
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1121,7 +1127,7 @@ export function BookingFlow({ catalog, today }: BookingFlowProps) {
                       </div>
                       <div className="flex flex-col gap-1.5">
                         <Label htmlFor="bookingLastName" className="text-xs">
-                          Sobrenome (opcional)
+                          Sobrenome
                         </Label>
                         <Input
                           id="bookingLastName"

@@ -4,6 +4,7 @@ import { withPublicApiRouteGuard } from "@/lib/api/with-api-guard";
 import { TIMEZONE, weekdayOf } from "@/lib/availability";
 import { BOOKING_DAY_LABELS } from "@/lib/catalog-booking";
 import { getShopCatalog } from "@/lib/get-shop-catalog";
+import { resolveShopIdFromRequest } from "@/lib/resolve-public-shop";
 import {
   groupWeekdayPrices,
   priceForWeekday,
@@ -55,7 +56,15 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        const catalog = await getShopCatalog();
+        const shopRef = await resolveShopIdFromRequest(request);
+        if (!shopRef) {
+          return NextResponse.json(
+            { error: "Informe a barbearia (?shop=slug)." },
+            { status: 400 }
+          );
+        }
+
+        const catalog = await getShopCatalog(shopRef.shopId);
         const { professionalId, date } = parsed.data;
         const weekday = date ? weekdayOf(date) : null;
 

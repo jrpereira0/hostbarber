@@ -61,6 +61,7 @@ export default async function ComissoesPage({ searchParams }: PageProps) {
   let professionalsQuery = admin
     .from("professionals")
     .select("id, nickname, commission_percent")
+    .eq("shop_id", session.shopId)
     .eq("active", true)
     .order("nickname");
 
@@ -81,7 +82,7 @@ export default async function ComissoesPage({ searchParams }: PageProps) {
     ? undefined
     : (session.professionalId ?? undefined);
 
-  const report = await getCommissionReport(admin, from, to, reportScopeId);
+  const report = await getCommissionReport(admin, session.shopId, from, to, reportScopeId);
 
   const initialProfessionalId = session.isOwner
     ? professionalId && professionals.some((p) => p.id === professionalId)
@@ -97,7 +98,7 @@ export default async function ComissoesPage({ searchParams }: PageProps) {
 
   const payoutEntries = await Promise.all(
     payoutTargets.map(async (id) => {
-      const rows = await listProfessionalCommissionPayouts(admin, id);
+      const rows = await listProfessionalCommissionPayouts(admin, session.shopId, id);
       return [id, rows] as const;
     })
   );

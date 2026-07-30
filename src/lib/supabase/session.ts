@@ -2,23 +2,33 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "@/lib/supabase/env";
 import { LOGIN_PATH } from "@/lib/login-path";
+import { PLATFORM_LOGIN_PATH } from "@/lib/platform-login-path";
 
-function isLoginPage(pathname: string): boolean {
+function isShopAdminLoginPage(pathname: string): boolean {
   return pathname === LOGIN_PATH;
 }
 
-// Mantém a sessão do Supabase atualizada e protege as rotas /admin.
+function isPlatformLoginPage(pathname: string): boolean {
+  return pathname === PLATFORM_LOGIN_PATH;
+}
+
+// Mantém a sessão do Supabase atualizada e protege /admin e /plataforma.
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAdminRoute = pathname.startsWith("/admin");
-  const loginPage = isLoginPage(pathname);
+  const isPlatformRoute = pathname.startsWith("/plataforma");
+  const shopAdminLogin = isShopAdminLoginPage(pathname);
+  const platformLogin = isPlatformLoginPage(pathname);
 
   try {
     const env = getSupabasePublicEnv();
 
     if (!env) {
-      if (isAdminRoute && !loginPage) {
+      if (isAdminRoute && !shopAdminLogin) {
         return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
+      }
+      if (isPlatformRoute && !platformLogin) {
+        return NextResponse.redirect(new URL(PLATFORM_LOGIN_PATH, request.url));
       }
       return NextResponse.next({ request });
     }
@@ -47,18 +57,42 @@ export async function updateSession(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (isAdminRoute && !loginPage && !user) {
+    if (isAdminRoute && !shopAdminLogin && !user) {
       return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
     }
 
-    if (loginPage && user) {
-      return NextResponse.redirect(new URL("/admin", request.url));
+    if (isPlatformRoute && !platformLogin && !user) {
+      return NextResponse.redirect(new URL(PLATFORM_LOGIN_PATH, request.url));
+    }
+
+    // Só manda pro /admin se a sessão for de dono/barbeiro/recepção.
+    // Superadmin da plataforma (ou outro login sem profile de loja) precisa
+    // ver o formulário — senão vira loop: login → /admin → perfil → login.
+    if (shopAdminLogin && user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role, shop_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const isShopStaff =
+        Boolean(profile?.shop_id) &&
+        (profile?.role === "owner" ||
+          profile?.role === "barber" ||
+          profile?.role === "reception");
+
+      if (isShopStaff) {
+        return NextResponse.redirect(new URL("/admin", request.url));
+      }
     }
 
     return supabaseResponse;
   } catch {
-    if (isAdminRoute && !loginPage) {
+    if (isAdminRoute && !shopAdminLogin) {
       return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
+    }
+    if (isPlatformRoute && !platformLogin) {
+      return NextResponse.redirect(new URL(PLATFORM_LOGIN_PATH, request.url));
     }
     return NextResponse.next({ request });
   }

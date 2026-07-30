@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import type { ApiScope } from "@/lib/api-key-scopes";
-import { resolveApiAuth, type ResolvedApiAuth } from "@/lib/api-key-auth";
+import type { ApiScope } from "@/lib/api-scopes";
+import {
+  resolvePublicApiAuth,
+  type PublicApiAuthContext,
+} from "@/lib/api-auth";
 import {
   protectedAuthRateLimitKey,
   resolveProtectedApiAuth,
@@ -12,7 +15,7 @@ import {
 } from "@/lib/rate-limit";
 
 type PublicHandler = (context: {
-  auth: ResolvedApiAuth;
+  auth: PublicApiAuthContext;
 }) => Promise<NextResponse>;
 
 type ProtectedHandler = (context: {
@@ -22,13 +25,14 @@ type ProtectedHandler = (context: {
 type PublicGuardOptions = {
   scope: ApiScope;
   rateLimit: PublicApiRateLimitBucket;
-  rateLimitKeySuffix?: (auth: ResolvedApiAuth) => string | undefined;
+  rateLimitKeySuffix?: (auth: PublicApiAuthContext) => string | undefined;
 };
 
 type ProtectedGuardOptions = {
   scope: ApiScope;
   rateLimit: PublicApiRateLimitBucket;
   whatsapp?: string | null;
+  shopId?: string | null;
 };
 
 export async function withPublicApiRouteGuard(
@@ -36,20 +40,13 @@ export async function withPublicApiRouteGuard(
   options: PublicGuardOptions,
   handler: PublicHandler
 ): Promise<NextResponse> {
-  const authResult = await resolveApiAuth(request, options.scope);
-  if (!authResult.ok) {
-    return authResult.response;
-  }
+  const authResult = resolvePublicApiAuth();
 
-  const bucket =
-    authResult.auth.type === "api_key" ? "apiKey" : options.rateLimit;
-
-  const keySuffix =
-    authResult.auth.type === "api_key"
-      ? authResult.auth.keyUuid
-      : options.rateLimitKeySuffix?.(authResult.auth);
-
-  const limited = enforcePublicApiRateLimit(request, bucket, keySuffix);
+  const limited = enforcePublicApiRateLimit(
+    request,
+    options.rateLimit,
+    options.rateLimitKeySuffix?.(authResult.auth)
+  );
   if (limited) return limited;
 
   return handler({ auth: authResult.auth });
@@ -62,17 +59,15 @@ export async function withProtectedApiRouteGuard(
 ): Promise<NextResponse> {
   const authResult = await resolveProtectedApiAuth(request, options.scope, {
     whatsapp: options.whatsapp,
+    shopId: options.shopId,
   });
   if (!authResult.ok) {
     return authResult.response;
   }
 
-  const bucket =
-    authResult.auth.type === "api_key" ? "apiKey" : options.rateLimit;
-
   const limited = enforcePublicApiRateLimit(
     request,
-    bucket,
+    options.rateLimit,
     protectedAuthRateLimitKey(authResult.auth)
   );
   if (limited) return limited;

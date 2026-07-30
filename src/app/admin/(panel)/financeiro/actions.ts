@@ -53,12 +53,15 @@ export async function loadCashRegisterHistory(
     return { ok: false, error: "Período inválido." };
   }
 
+  const auth = await getAdminSession();
+  if (!auth) return { ok: false, error: "Você precisa estar logado." };
+
   const admin = requireAdminClient();
   if (isActionResult(admin)) {
     return { ok: false, error: admin.error };
   }
 
-  const sessions = await listCashRegisterSessions(admin, from, to);
+  const sessions = await listCashRegisterSessions(admin, auth.shopId, from, to);
   return { ok: true, sessions };
 }
 
@@ -105,6 +108,7 @@ export async function openCashRegisterAction(
 
   const result = await openCashRegister(
     admin,
+    adminUser.shopId,
     serviceDate,
     adminUser.userId,
     parsed.data
@@ -140,7 +144,7 @@ export async function closeCashRegisterAction(
     return { ok: false, error: admin.error };
   }
 
-  const result = await closeCashRegister(admin, serviceDate, auth.userId);
+  const result = await closeCashRegister(admin, auth.shopId, serviceDate, auth.userId);
   if (!result.ok) return { ok: false, error: result.error };
 
   revalidateFinance();
@@ -180,6 +184,7 @@ export async function reopenCashRegisterAction(
 
   const result = await reopenCashRegister(
     admin,
+    auth.shopId,
     serviceDate,
     auth.userId,
     parsed.data
@@ -205,12 +210,15 @@ export async function loadCashRegisterForDate(
   const dateParsed = parseServiceDate(serviceDate);
   if (!dateParsed.ok) return { ok: false, error: dateParsed.error };
 
+  const auth = await getAdminSession();
+  if (!auth) return { ok: false, error: "Você precisa estar logado." };
+
   const admin = requireAdminClient();
   if (isActionResult(admin)) {
     return { ok: false, error: admin.error };
   }
 
-  const session = await getCashRegisterSession(admin, serviceDate);
+  const session = await getCashRegisterSession(admin, auth.shopId, serviceDate);
   return { ok: true, session };
 }
 
@@ -251,6 +259,7 @@ export async function payCommissionAction(input: {
   }
 
   const result = await payProfessionalCommission(admin, {
+    shopId: auth.shopId,
     professionalId,
     from,
     to,

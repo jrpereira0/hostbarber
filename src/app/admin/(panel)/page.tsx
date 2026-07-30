@@ -23,6 +23,7 @@ import { getAdminSession, canViewAllAgendas } from "@/lib/require-admin";
 import { loadServiceBookingCounts } from "@/lib/service-booking-stats";
 import { AgendaView } from "@/components/admin/agenda-view";
 import type { AppointmentItem } from "@/components/admin/appointment-item";
+import { parseBookingSource } from "@/lib/booking-source";
 import type { ProductOption } from "@/lib/product-types";
 import type { CashRegisterResponsibleOption } from "@/components/admin/open-cash-register-dialog";
 import type { CashRegisterSession } from "@/lib/cash-register-service";
@@ -47,6 +48,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const { data: allProfessionals } = await supabase
     .from("professionals")
     .select("id")
+    .eq("shop_id", session.shopId)
     .eq("active", true)
     .order("nickname");
 
@@ -83,6 +85,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
       )
     `
     )
+    .eq("shop_id", session.shopId)
     .eq("date", date)
     .neq("status", "cancelled")
     .order("start_time");
@@ -96,10 +99,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
   const [dayContext, { data: services }, { data: products }, { data: rawAppointments }, pricingContext, bookingCounts, { data: shopSettings }] =
     await Promise.all([
-      getAgendaDayContext(date, professionalIds),
+      getAgendaDayContext(date, professionalIds, session.shopId),
       supabase
         .from("services")
         .select("id, name, duration_minutes, price_cents, photo_url, photo_position")
+        .eq("shop_id", session.shopId)
         .eq("active", true)
         .order("name"),
       supabase
@@ -107,17 +111,18 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
         .select(
           "id, name, price_cents, commission_percent, stock_quantity, photo_url, photo_position, product_categories ( id, name )"
         )
+        .eq("shop_id", session.shopId)
         .eq("active", true)
         .order("name"),
       appointmentsQuery,
-      loadServicePricingContext(supabase, date),
-      loadServiceBookingCounts(),
+      loadServicePricingContext(supabase, date, undefined, session.shopId),
+      loadServiceBookingCounts(session.shopId),
       supabase
-        .from("shop_settings")
+        .from("shops")
         .select(
-          "shop_name, confirmation_whatsapp_message, confirmation_whatsapp_enabled"
+          "name, confirmation_whatsapp_message, confirmation_whatsapp_enabled"
         )
-        .eq("id", 1)
+        .eq("id", session.shopId)
         .maybeSingle(),
     ]);
 
@@ -135,11 +140,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     if (!isActionResult(admin)) {
       const [cashSession, openCashRegister, responsibleOptions] =
         await Promise.all([
-          getCashRegisterSession(admin, date),
-          getOpenCashRegisterSession(admin),
-          loadCashRegisterResponsibleOptions(admin, session.userId),
+          getCashRegisterSession(admin, session.shopId, date),
+          getOpenCashRegisterSession(admin, session.shopId),
+          loadCashRegisterResponsibleOptions(admin, session.shopId, session.userId),
         ]);
-      const cash = await getCashRegisterSummary(admin, date, {
+      const cash = await getCashRegisterSummary(admin, session.shopId, date, {
         cashRegisterSessionId: cashSession?.id,
       });
       cashRegister = {
@@ -172,6 +177,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     const { data: creditRows } = await supabase
       .from("customers")
       .select("whatsapp, credit_balance_cents")
+      .eq("shop_id", session.shopId)
       .in("whatsapp", lookupKeys);
 
     for (const row of creditRows ?? []) {
@@ -216,7 +222,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     status: a.status as AppointmentItem["status"],
     isSqueezeIn: a.is_squeeze_in ?? false,
     isComandaExtra: a.is_comanda_extra ?? false,
-    bookingSource: (a.booking_source as AppointmentItem["bookingSource"]) ?? null,
+    bookingSource: parseBookingSource(a.booking_source),
     services: (a.appointment_services ?? []).flatMap((row) => {
       const quantity = Math.max(
         1,
@@ -282,7 +288,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
       )}
       productsCatalog={productsCatalog}
       cashRegister={cashRegister}
-      shopName={shopSettings?.shop_name ?? ""}
+      shopName={shopSettings?.name ?? ""}
       confirmationWhatsappMessage={
         shopSettings?.confirmation_whatsapp_message?.trim()
           ? shopSettings.confirmation_whatsapp_message

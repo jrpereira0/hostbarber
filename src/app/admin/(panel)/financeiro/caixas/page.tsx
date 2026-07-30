@@ -41,12 +41,20 @@ export default async function CaixasPage({ searchParams }: PageProps) {
   }
 
   const adminSession = await getAdminSession();
+  if (!adminSession) {
+    return (
+      <EmptyState
+        icon={Wallet}
+        title="Sessão expirada"
+        description="Faça login de novo para ver o histórico de caixa."
+      />
+    );
+  }
+
   const [sessions, openCashRegister, responsibleOptions] = await Promise.all([
-    listCashRegisterSessions(admin, from, to),
-    getOpenCashRegisterSession(admin),
-    adminSession
-      ? loadCashRegisterResponsibleOptions(admin, adminSession.userId)
-      : Promise.resolve([]),
+    listCashRegisterSessions(admin, adminSession.shopId, from, to),
+    getOpenCashRegisterSession(admin, adminSession.shopId),
+    loadCashRegisterResponsibleOptions(admin, adminSession.shopId, adminSession.userId),
   ]);
 
   return (

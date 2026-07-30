@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { safeApiRoute } from "@/lib/api/safe-route";
 import { withProtectedApiRouteGuard } from "@/lib/api/with-api-guard";
 import { getLastCompletedAppointmentByWhatsapp } from "@/lib/manage-public-appointment";
+import { resolveShopIdFromRequest } from "@/lib/resolve-public-shop";
 import {
   normalizeWhatsapp,
   WHATSAPP_INVALID_MESSAGE,
 } from "@/lib/whatsapp";
 
-// GET /api/v1/appointments/last-completed?whatsapp=...
+// GET /api/v1/appointments/last-completed?whatsapp=...&shop=slug
 export async function GET(request: NextRequest) {
   return safeApiRoute(async () => {
     const raw = request.nextUrl.searchParams.get("whatsapp") ?? "";
@@ -19,15 +20,31 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const shopRef = await resolveShopIdFromRequest(request);
+    if (!shopRef) {
+      return NextResponse.json(
+        { ok: false, error: "Informe a barbearia (?shop=slug)." },
+        { status: 400 }
+      );
+    }
+
     return withProtectedApiRouteGuard(
       request,
       {
         scope: "appointments:read",
         rateLimit: "whatsappSensitive",
         whatsapp,
+        shopId: shopRef.shopId,
       },
-      async () => {
-        const result = await getLastCompletedAppointmentByWhatsapp(whatsapp);
+      async ({ auth }) => {
+        const shopId =
+          auth.type === "client" || auth.type === "admin"
+            ? auth.shopId
+            : shopRef.shopId;
+        const result = await getLastCompletedAppointmentByWhatsapp(
+          whatsapp,
+          shopId
+        );
 
         if (!result.ok) {
           return NextResponse.json(

@@ -1,7 +1,9 @@
+import { redirect } from "next/navigation";
 import { Package } from "lucide-react";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
 import { requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { todayInTimezone } from "@/lib/availability";
 import { getProductSalesReport } from "@/lib/product-sales-report";
 import { shiftDate } from "@/lib/date-range";
@@ -21,7 +23,9 @@ function isIsoDate(value: string | undefined): value is string {
 }
 
 export default async function ProductSalesPage({ searchParams }: PageProps) {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const { from: fromParam, to: toParam } = await searchParams;
   const today = todayInTimezone();
@@ -48,7 +52,7 @@ export default async function ProductSalesPage({ searchParams }: PageProps) {
     );
   }
 
-  const report = await getProductSalesReport(admin, from, to);
+  const report = await getProductSalesReport(admin, session.shopId, from, to);
 
   return (
     <ProductSalesView

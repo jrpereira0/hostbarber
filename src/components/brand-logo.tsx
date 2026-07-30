@@ -1,13 +1,21 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BRAND_ICON_PATH, BRAND_NAME } from "@/lib/brand";
+import { PRODUCT_ICON_PATH, PRODUCT_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
+/** Tamanhos em tela (o arquivo-fonte pode ser 500×500). */
 const iconSizes = {
-  sm: "size-7",
-  md: "size-8",
+  sm: "size-8",
+  md: "size-9",
   lg: "size-10",
   xl: "size-14",
+} as const;
+
+const iconPixelSizes = {
+  sm: 32,
+  md: 36,
+  lg: 40,
+  xl: 56,
 } as const;
 
 type BrandLogoProps = {
@@ -27,20 +35,22 @@ function BrandImage({
   size: keyof typeof iconSizes;
   priority?: boolean;
 }) {
+  const px = iconPixelSizes[size];
   return (
     <div
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-xl bg-black",
+        "relative shrink-0 overflow-hidden rounded-lg",
         iconSizes[size]
       )}
     >
       <Image
-        src={BRAND_ICON_PATH}
-        alt={BRAND_NAME}
+        src={PRODUCT_ICON_PATH}
+        alt={PRODUCT_NAME}
         fill
-        className="object-contain p-0.5"
-        sizes={size === "xl" ? "56px" : size === "lg" ? "40px" : "32px"}
+        className="object-cover"
+        sizes={`${px}px`}
         priority={priority}
+        unoptimized
       />
     </div>
   );
@@ -66,7 +76,7 @@ export function BrandLogo({
               nameClassName
             )}
           >
-            {BRAND_NAME}
+            {PRODUCT_NAME}
           </span>
           {subtitle && (
             <span
@@ -104,17 +114,18 @@ export function BrandMark({ className }: BrandMarkProps) {
   return (
     <div
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-2xl border border-background/15 bg-black",
+        "relative shrink-0 overflow-hidden rounded-2xl",
         className
       )}
     >
       <Image
-        src={BRAND_ICON_PATH}
-        alt={BRAND_NAME}
+        src={PRODUCT_ICON_PATH}
+        alt={PRODUCT_NAME}
         fill
-        className="object-contain p-1"
+        className="object-cover"
         sizes="112px"
         priority
+        unoptimized
       />
     </div>
   );

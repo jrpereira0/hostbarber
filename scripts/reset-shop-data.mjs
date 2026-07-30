@@ -69,11 +69,6 @@ async function main() {
   );
   summary.comandas = await deleteAllById("comandas");
   summary.cash_register_sessions = await deleteAllById("cash_register_sessions");
-  summary.appointment_notifications = await deleteCompositeRows(
-    "appointment_notifications",
-    ["appointment_id", "event"]
-  );
-  summary.appointment_reminders = await deleteAllById("appointment_reminders");
   summary.appointment_services = await deleteCompositeRows(
     "appointment_services",
     ["appointment_id", "service_id"]
@@ -100,8 +95,6 @@ async function main() {
         comanda_appointments: summary.comanda_appointments,
         comandas: summary.comandas,
         cash_register_sessions: summary.cash_register_sessions,
-        appointment_notifications: summary.appointment_notifications,
-        appointment_reminders: summary.appointment_reminders,
         appointment_services: summary.appointment_services,
         appointments: summary.appointments,
         schedule_blocks: summary.schedule_blocks,

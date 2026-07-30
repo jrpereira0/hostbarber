@@ -107,6 +107,7 @@ function applyCreditDepositRow(
 async function loadCreditDepositsForPeriod(
   admin: SupabaseClient,
   params: {
+    shopId: string;
     from: string;
     to: string;
     cashRegisterSessionId?: string;
@@ -123,10 +124,11 @@ async function loadCreditDepositsForPeriod(
     const { data } = await admin
       .from("customer_credit_transactions")
       .select(
-        "amount_cents, payment_method, comanda_id, comandas ( service_date )"
+        "amount_cents, payment_method, comanda_id, comandas!inner ( service_date, shop_id )"
       )
       .eq("type", "add")
-      .eq("cash_register_session_id", params.cashRegisterSessionId);
+      .eq("cash_register_session_id", params.cashRegisterSessionId)
+      .eq("comandas.shop_id", params.shopId);
 
     for (const row of data ?? []) {
       const comanda = Array.isArray(row.comandas)
@@ -144,10 +146,11 @@ async function loadCreditDepositsForPeriod(
   const { data } = await admin
     .from("customer_credit_transactions")
     .select(
-      "amount_cents, payment_method, comanda_id, comandas!inner ( service_date )"
+      "amount_cents, payment_method, comanda_id, comandas!inner ( service_date, shop_id )"
     )
     .eq("type", "add")
     .not("cash_register_session_id", "is", null)
+    .eq("comandas.shop_id", params.shopId)
     .gte("comandas.service_date", params.from)
     .lte("comandas.service_date", params.to);
 
@@ -166,6 +169,7 @@ async function loadCreditDepositsForPeriod(
 
 export async function getFinancePeriodSummary(
   admin: SupabaseClient,
+  shopId: string,
   from: string,
   to: string,
   options: { cashRegisterSessionId?: string } = {}
@@ -189,6 +193,7 @@ export async function getFinancePeriodSummary(
       comanda_payments ( payment_method, amount_cents )
     `
     )
+    .eq("shop_id", shopId)
     .eq("status", "closed")
     .gte("service_date", from)
     .lte("service_date", to)
@@ -250,6 +255,7 @@ export async function getFinancePeriodSummary(
   );
   const { byMethod: creditDepositsByMethod, byDay: creditDepositsByDay } =
     await loadCreditDepositsForPeriod(admin, {
+      shopId,
       from,
       to,
       cashRegisterSessionId: options.cashRegisterSessionId,
@@ -285,6 +291,7 @@ export async function getFinancePeriodSummary(
 
 async function loadOpenComandasForDate(
   admin: SupabaseClient,
+  shopId: string,
   date: string
 ): Promise<CashRegisterOpenComanda[]> {
   const { data } = await admin
@@ -303,6 +310,7 @@ async function loadOpenComandasForDate(
       comanda_items ( id, service_name, quantity, is_tip )
     `
     )
+    .eq("shop_id", shopId)
     .eq("status", "open")
     .eq("service_date", date)
     .order("created_at", { ascending: false });
@@ -348,26 +356,29 @@ async function loadOpenComandasForDate(
 /** Quantidade de comandas abertas com itens no dia (bloqueia encerrar caixa). */
 export async function countOpenComandasWithItems(
   admin: SupabaseClient,
+  shopId: string,
   date: string
 ): Promise<number> {
-  const open = await loadOpenComandasForDate(admin, date);
+  const open = await loadOpenComandasForDate(admin, shopId, date);
   return open.length;
 }
 
 export async function getCashRegisterSummary(
   admin: SupabaseClient,
+  shopId: string,
   date: string,
   options: { cashRegisterSessionId?: string } = {}
 ): Promise<CashRegisterSummary> {
   const [summary, openComandas] = await Promise.all([
-    getFinancePeriodSummary(admin, date, date, options),
-    loadOpenComandasForDate(admin, date),
+    getFinancePeriodSummary(admin, shopId, date, date, options),
+    loadOpenComandasForDate(admin, shopId, date),
   ]);
   return { ...summary, openComandas };
 }
 
 export async function getCommissionSummary(
   admin: SupabaseClient,
+  shopId: string,
   from: string,
   to: string,
   professionalId?: string,
@@ -391,6 +402,7 @@ export async function getCommissionSummary(
       )
     `
     )
+    .eq("shop_id", shopId)
     .eq("status", "closed")
     .gte("service_date", from)
     .lte("service_date", to);
@@ -625,6 +637,7 @@ async function loadFinanceServiceBreakdown(
 
 async function loadFinanceServiceVolume(
   admin: SupabaseClient,
+  shopId: string,
   from: string,
   to: string
 ): Promise<{
@@ -633,8 +646,9 @@ async function loadFinanceServiceVolume(
 }> {
   const { data } = await admin
     .from("comanda_items")
-    .select("is_tip, comandas!inner(service_date, status)")
+    .select("is_tip, comandas!inner(service_date, status, shop_id)")
     .eq("comandas.status", "closed")
+    .eq("comandas.shop_id", shopId)
     .eq("is_tip", false)
     .gte("comandas.service_date", from)
     .lte("comandas.service_date", to);
@@ -761,14 +775,15 @@ function buildDayMetrics(
 
 export async function getFinanceMetricsReport(
   admin: SupabaseClient,
+  shopId: string,
   from: string,
   to: string
 ): Promise<FinanceMetricsReport> {
   const [summary, commissions, serviceVolume, productSales] = await Promise.all([
-    getFinancePeriodSummary(admin, from, to),
-    getCommissionSummary(admin, from, to, undefined, { excludePaid: false }),
-    loadFinanceServiceVolume(admin, from, to),
-    getProductSalesReport(admin, from, to),
+    getFinancePeriodSummary(admin, shopId, from, to),
+    getCommissionSummary(admin, shopId, from, to, undefined, { excludePaid: false }),
+    loadFinanceServiceVolume(admin, shopId, from, to),
+    getProductSalesReport(admin, shopId, from, to),
   ]);
 
   const serviceBreakdown = await loadFinanceServiceBreakdown(
@@ -813,8 +828,8 @@ export async function getFinanceMetricsReport(
 
   if (previousFrom <= previousTo) {
     const [previous, previousServiceVolume] = await Promise.all([
-      getFinancePeriodSummary(admin, previousFrom, previousTo),
-      loadFinanceServiceVolume(admin, previousFrom, previousTo),
+      getFinancePeriodSummary(admin, shopId, previousFrom, previousTo),
+      loadFinanceServiceVolume(admin, shopId, previousFrom, previousTo),
     ]);
     const totalChangePercent = percentChange(summary.totalCents, previous.totalCents);
     comparison = {
@@ -1110,12 +1125,14 @@ function finalizeComandaPayments(
 
 async function loadCustomerNamesByWhatsapp(
   admin: SupabaseClient,
+  shopId: string,
   whatsapps: string[]
 ): Promise<Map<string, string>> {
   if (whatsapps.length === 0) return new Map();
   const { data } = await admin
     .from("customers")
     .select("whatsapp, first_name, last_name")
+    .eq("shop_id", shopId)
     .in("whatsapp", whatsapps);
 
   const map = new Map<string, string>();
@@ -1149,6 +1166,7 @@ function firstPro(
 
 export async function getCommissionReport(
   admin: SupabaseClient,
+  shopId: string,
   from: string,
   to: string,
   professionalId?: string
@@ -1175,6 +1193,7 @@ export async function getCommissionReport(
       comanda_payments ( payment_method, amount_cents )
     `
     )
+    .eq("shop_id", shopId)
     .eq("status", "closed")
     .gte("service_date", from)
     .lte("service_date", to);
@@ -1364,7 +1383,7 @@ export async function getCommissionReport(
       )
     ),
   ];
-  const customerNames = await loadCustomerNamesByWhatsapp(admin, whatsapps);
+  const customerNames = await loadCustomerNamesByWhatsapp(admin, shopId, whatsapps);
 
   const professionals: CommissionProfessionalReport[] = [...proMap.entries()]
     .map(([id, entry]) => ({

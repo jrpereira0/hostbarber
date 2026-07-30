@@ -1,42 +1,18 @@
-import type { Metadata } from "next";
-import { todayInTimezone } from "@/lib/availability";
-import { BOOKING_PATH } from "@/lib/booking-path";
-import { getShopCatalog } from "@/lib/get-shop-catalog";
-import { getShopSeo } from "@/lib/get-shop-seo";
-import { BookingPage } from "@/components/booking/booking-page";
+import { redirect } from "next/navigation";
+import { bookingPathForSlug } from "@/lib/booking-path";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getDefaultPublicShopRef } from "@/lib/shops/queries";
 import { BookingUnavailable } from "@/components/booking/booking-unavailable";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const { name, shareDescription } = await getShopSeo();
+/** `/agenda` redireciona para `/agenda/{slug}` da loja padrão (primeira ativa). */
+export default async function AgendaIndexRedirect() {
+  const admin = createAdminClient();
+  if (!admin) return <BookingUnavailable />;
 
-  return {
-    title: { absolute: name },
-    description: shareDescription,
-    openGraph: {
-      type: "website",
-      locale: "pt_BR",
-      url: BOOKING_PATH,
-      siteName: name,
-      title: name,
-      description: shareDescription,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: name,
-      description: shareDescription,
-    },
-  };
-}
+  const shop = await getDefaultPublicShopRef(admin);
+  if (!shop) return <BookingUnavailable />;
 
-export default async function AgendaPublicPage() {
-  let catalog;
-  try {
-    catalog = await getShopCatalog();
-  } catch {
-    return <BookingUnavailable />;
-  }
-
-  return <BookingPage catalog={catalog} today={todayInTimezone()} />;
+  redirect(bookingPathForSlug(shop.slug));
 }

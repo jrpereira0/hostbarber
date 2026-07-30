@@ -74,6 +74,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
           appointmentId: id,
           status: parsed.data.status,
           asOwner: true,
+          shopId: auth.shopId,
           restrictToProfessionalId: null,
         });
 

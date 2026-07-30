@@ -100,7 +100,7 @@ export function BookingSection({ catalog, today }: BookingSectionProps) {
             aria-hidden={mode !== "account"}
             inert={mode !== "account" ? true : undefined}
           >
-            <MyAccount />
+            <MyAccount shopSlug={catalog.shop.slug} />
           </div>
           <div
             className={cn(

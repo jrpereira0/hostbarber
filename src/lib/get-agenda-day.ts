@@ -70,10 +70,11 @@ function roundUp(minutes: number, step: number): number {
 
 export async function getAgendaDayContext(
   date: string,
-  professionalIds: string[]
+  professionalIds: string[],
+  shopId: string
 ): Promise<AgendaDayContext> {
   const admin = createAdminClient();
-  if (!admin) {
+  if (!admin || !shopId) {
     return {
       gridStart: ENCAIXE_DAY_START,
       gridEnd: ENCAIXE_DAY_END,
@@ -85,9 +86,10 @@ export async function getAgendaDayContext(
   }
 
   const { data: settings } = await admin
-    .from("shop_settings")
+    .from("shops")
     .select("slot_step_minutes")
-    .single();
+    .eq("id", shopId)
+    .maybeSingle();
 
   const slotStepMinutes = settings?.slot_step_minutes ?? SLOT_STEP_MINUTES;
 
@@ -114,21 +116,25 @@ export async function getAgendaDayContext(
     admin
       .from("business_hours")
       .select("active, open_time, close_time")
+      .eq("shop_id", shopId)
       .eq("weekday", weekday)
       .maybeSingle(),
     admin
       .from("schedule_exceptions")
       .select("professional_id, kind, start_time, end_time")
+      .eq("shop_id", shopId)
       .eq("date", date),
     admin
       .from("working_hours")
       .select("professional_id, start_time, end_time")
-      .eq("weekday", weekday),
+      .eq("weekday", weekday)
+      .in("professional_id", professionalIds),
     admin
       .from("professionals")
       .select(
         "id, nickname, photo_url, photo_position, commission_percent, professional_services(service_id)"
       )
+      .eq("shop_id", shopId)
       .in("id", professionalIds)
       .order("nickname"),
     admin
@@ -136,6 +142,7 @@ export async function getAgendaDayContext(
       .select(
         "id, professional_id, start_time, end_time, note, professionals ( nickname )"
       )
+      .eq("shop_id", shopId)
       .eq("date", date)
       .in("professional_id", professionalIds)
       .order("start_time"),

@@ -2,8 +2,6 @@
 
 Comandas, caixa e comissões vivem **só no painel admin** (não há rotas `/api/v1` para isso). Este guia resume as regras do dia a dia na barbearia.
 
-Guia da API de agenda/lembretes: [guia-n8n.md](./guia-n8n.md).
-
 ---
 
 ## Regras de negócio

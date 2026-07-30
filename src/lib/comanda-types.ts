@@ -64,6 +64,7 @@ export type ComandaLinkedAppointment = {
 
 export type ComandaDetail = {
   id: string;
+  shopId: string;
   appointmentId: string;
   professionalId: string;
   professionalNickname: string;

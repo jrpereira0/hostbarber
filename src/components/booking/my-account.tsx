@@ -21,6 +21,7 @@ import {
 } from "@/components/booking/client-whatsapp-auth";
 import { PhotoField } from "@/components/admin/photo-field";
 import { formatPriceBRL, formatWhatsapp } from "@/lib/format";
+import { withShopQuery } from "@/lib/booking-path";
 import {
   DEFAULT_PHOTO_POSITION,
   normalizePhotoPosition,
@@ -28,7 +29,8 @@ import {
 
 type Phase = "auth" | "profile";
 
-export function MyAccount() {
+export function MyAccount({ shopSlug }: { shopSlug: string }) {
+
   const [phase, setPhase] = useState<Phase>("auth");
   const [whatsapp, setWhatsapp] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -56,7 +58,7 @@ export function MyAccount() {
       setLoading(true);
       setWhatsapp(wa);
       try {
-        const res = await fetch("/api/v1/customers/me", {
+        const res = await fetch(withShopQuery("/api/v1/customers/me", shopSlug), {
           credentials: "include",
         });
         const body = await res.json().catch(() => ({}));
@@ -104,7 +106,7 @@ export function MyAccount() {
         setLoading(false);
       }
     },
-    [resetPhotoDraft]
+    [resetPhotoDraft, shopSlug]
   );
 
   const handleAuthenticated = useCallback(
@@ -117,8 +119,8 @@ export function MyAccount() {
   async function handleSave() {
     const nome = firstName.trim();
     const sobrenome = lastName.trim();
-    if (!nome) {
-      toast.error("Preencha o nome.");
+    if (!nome || !sobrenome) {
+      toast.error("Preencha nome e sobrenome.");
       return;
     }
 
@@ -137,7 +139,7 @@ export function MyAccount() {
         formData.set("photo", file);
       }
 
-      const res = await fetch("/api/v1/customers/me", {
+      const res = await fetch(withShopQuery("/api/v1/customers/me", shopSlug), {
         method: "PATCH",
         credentials: "include",
         body: formData,
@@ -200,8 +202,9 @@ export function MyAccount() {
 
         <div className="mt-8">
           <ClientWhatsappAuth
+        shopSlug={shopSlug}
             onAuthenticated={handleAuthenticated}
-            hint="Enviamos um código no WhatsApp. Depois disso você acessa sua conta neste aparelho."
+            hint="Informe seu WhatsApp pra acessar sua conta neste aparelho."
           />
         </div>
       </div>
@@ -307,8 +310,8 @@ export function MyAccount() {
               >
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {hasProfile
-                    ? "Altere foto e nome. Sobrenome é opcional. O WhatsApp não muda."
-                    : "Complete seu cadastro e adicione uma foto se quiser. Sobrenome é opcional."}
+                    ? "Altere foto, nome e sobrenome. O WhatsApp não muda."
+                    : "Complete seu cadastro com nome e sobrenome. Foto é opcional."}
                 </p>
 
                 <PhotoField
@@ -334,7 +337,7 @@ export function MyAccount() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="account-last-name">
-                      Sobrenome (opcional)
+                      Sobrenome
                     </Label>
                     <Input
                       id="account-last-name"

@@ -50,6 +50,7 @@ export default async function CustomerDetailPage({
     `
     )
     .eq("id", id)
+    .eq("shop_id", session.shopId)
     .single();
 
   if (!customer) notFound();
@@ -68,6 +69,7 @@ export default async function CustomerDetailPage({
         comanda_payments (payment_method, amount_cents)
       `
       )
+      .eq("shop_id", session.shopId)
       .eq("customer_whatsapp", customer.whatsapp)
       .eq("status", "closed")
       .order("service_date", { ascending: false })

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient, requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
-import { requireOwner, type ActionResult } from "@/lib/require-owner";
+import { requireOwnerSession, type ActionResult } from "@/lib/require-owner";
 import { uploadPublicPhoto } from "@/lib/upload-photo";
 import { normalizePhotoPosition } from "@/lib/photo-position";
 import {
@@ -64,8 +64,8 @@ async function uploadPhoto(productId: string, photo: File): Promise<string | nul
 }
 
 export async function createProduct(formData: FormData): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
@@ -75,9 +75,20 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0].message };
   }
 
+  const { data: category } = await admin
+    .from("product_categories")
+    .select("id")
+    .eq("id", parsed.data.categoryId)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!category) {
+    return { ok: false, error: "Categoria não encontrada." };
+  }
+
   const { data: product, error } = await admin
     .from("products")
     .insert({
+      shop_id: session.shopId,
       name: parsed.data.name,
       description: parsed.data.description,
       category_id: parsed.data.categoryId,
@@ -110,13 +121,15 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
       await admin
         .from("products")
         .update({ photo_url: url, photo_position: photoPosition })
-        .eq("id", product.id);
+        .eq("id", product.id)
+        .eq("shop_id", session.shopId);
     }
   } else {
     await admin
       .from("products")
       .update({ photo_position: photoPosition })
-      .eq("id", product.id);
+      .eq("id", product.id)
+      .eq("shop_id", session.shopId);
   }
 
   revalidatePath("/admin/produtos");
@@ -127,15 +140,33 @@ export async function updateProduct(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
 
+  const { data: current } = await admin
+    .from("products")
+    .select("id")
+    .eq("id", id)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!current) return { ok: false, error: "Produto não encontrado." };
+
   const parsed = parseProductForm(formData);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0].message };
+  }
+
+  const { data: category } = await admin
+    .from("product_categories")
+    .select("id")
+    .eq("id", parsed.data.categoryId)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!category) {
+    return { ok: false, error: "Categoria não encontrada." };
   }
 
   const updates: Record<string, unknown> = {
@@ -156,7 +187,11 @@ export async function updateProduct(
     if (url) updates.photo_url = url;
   }
 
-  const { error } = await admin.from("products").update(updates).eq("id", id);
+  const { error } = await admin
+    .from("products")
+    .update(updates)
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
   if (error) return { ok: false, error: `Erro ao salvar: ${error.message}` };
 
   revalidatePath("/admin/produtos");
@@ -169,8 +204,8 @@ export async function adjustProductStockAction(input: {
   reason: StockAdjustReason;
   note?: string;
 }): Promise<ActionResult & { quantityAfter?: number }> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
@@ -194,6 +229,7 @@ export async function adjustProductStockAction(input: {
 
   const result = await applyProductStockDelta(admin, {
     productId: input.productId,
+    shopId: session.shopId,
     delta: input.delta,
     reason: input.reason,
     note: input.note,
@@ -211,8 +247,8 @@ export async function setProductActive(
   id: string,
   active: boolean
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
@@ -220,7 +256,8 @@ export async function setProductActive(
   const { error } = await admin
     .from("products")
     .update({ active, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
 
   if (error) return { ok: false, error: error.message };
 
@@ -229,11 +266,19 @@ export async function setProductActive(
 }
 
 export async function deleteProduct(id: string): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
+
+  const { data: product } = await admin
+    .from("products")
+    .select("id")
+    .eq("id", id)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!product) return { ok: false, error: "Produto não encontrado." };
 
   const { count } = await admin
     .from("comanda_items")
@@ -248,7 +293,11 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
     };
   }
 
-  const { error } = await admin.from("products").delete().eq("id", id);
+  const { error } = await admin
+    .from("products")
+    .delete()
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/produtos");
@@ -258,8 +307,8 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
 export async function createProductCategory(
   formData: FormData
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
@@ -274,6 +323,7 @@ export async function createProductCategory(
   }
 
   const { error } = await admin.from("product_categories").insert({
+    shop_id: session.shopId,
     name: parsed.data.name,
     sort_order: parsed.data.sortOrder,
   });
@@ -294,8 +344,8 @@ export async function updateProductCategory(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
@@ -315,7 +365,8 @@ export async function updateProductCategory(
       name: parsed.data.name,
       sort_order: parsed.data.sortOrder,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
 
   if (error) {
     if (error.code === "23505") {
@@ -333,8 +384,8 @@ export async function setProductCategoryActive(
   id: string,
   active: boolean
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
@@ -342,7 +393,8 @@ export async function setProductCategoryActive(
   const { error } = await admin
     .from("product_categories")
     .update({ active })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
 
   if (error) return { ok: false, error: error.message };
 
@@ -352,16 +404,25 @@ export async function setProductCategoryActive(
 }
 
 export async function deleteProductCategory(id: string): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
 
+  const { data: category } = await admin
+    .from("product_categories")
+    .select("id")
+    .eq("id", id)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!category) return { ok: false, error: "Categoria não encontrada." };
+
   const { count } = await admin
     .from("products")
     .select("id", { count: "exact", head: true })
-    .eq("category_id", id);
+    .eq("category_id", id)
+    .eq("shop_id", session.shopId);
 
   if (count && count > 0) {
     return {
@@ -370,7 +431,11 @@ export async function deleteProductCategory(id: string): Promise<ActionResult> {
     };
   }
 
-  const { error } = await admin.from("product_categories").delete().eq("id", id);
+  const { error } = await admin
+    .from("product_categories")
+    .delete()
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/produtos");

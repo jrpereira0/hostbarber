@@ -17,6 +17,8 @@ export type AdminSession = {
   isReception: boolean;
   professionalId: string | null;
   permissions: ProfessionalPermissions;
+  /** Barbearia do usuário logado (multi-loja). */
+  shopId: string;
 };
 
 /** Dono e recepção veem/operam a agenda de todos os barbeiros. */
@@ -43,16 +45,30 @@ export async function getAdminSession(): Promise<AdminSession | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, shop_id")
     .eq("id", user.id)
     .single();
 
   if (
     !profile ||
+    !profile.shop_id ||
     (profile.role !== "owner" &&
       profile.role !== "barber" &&
       profile.role !== "reception")
   ) {
+    return null;
+  }
+
+  const shopId = profile.shop_id as string;
+
+  const { data: shop } = await supabase
+    .from("shops")
+    .select("id")
+    .eq("id", shopId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (!shop) {
     return null;
   }
 
@@ -64,6 +80,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
       isReception: false,
       professionalId: null,
       permissions: OWNER_PERMISSIONS,
+      shopId,
     };
   }
 
@@ -74,8 +91,8 @@ export async function getAdminSession(): Promise<AdminSession | null> {
       isOwner: false,
       isReception: true,
       professionalId: null,
-      // Agenda/comanda/clientes no dia a dia; sem fechar comanda nem financeiro/cadastros do dono.
       permissions: RECEPTION_PERMISSIONS,
+      shopId,
     };
   }
 
@@ -85,6 +102,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
       "id, can_book_clients, can_create_squeeze_in, can_open_comanda, can_edit_comanda, can_close_comanda, can_edit_appointments, can_cancel_appointments, can_manage_schedule_blocks"
     )
     .eq("profile_id", user.id)
+    .eq("shop_id", shopId)
     .maybeSingle();
 
   return {
@@ -94,6 +112,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
     isReception: false,
     professionalId: pro?.id ?? null,
     permissions: mapProfessionalPermissionsRow(pro),
+    shopId,
   };
 }
 

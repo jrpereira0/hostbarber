@@ -168,8 +168,19 @@ export async function getAvailability(
     return { ok: false, error: "Sistema indisponível no momento.", status: 503 };
   }
 
+  const { data: professional } = await admin
+    .from("professionals")
+    .select("id, active, shop_id")
+    .eq("id", professionalId)
+    .maybeSingle();
+
+  if (!professional || !professional.active || !professional.shop_id) {
+    return { ok: false, error: "Profissional não encontrado.", status: 404 };
+  }
+
+  const shopId = professional.shop_id as string;
+
   const [
-    { data: professional },
     { data: services },
     { data: weekdayPriceRows },
     { data: links },
@@ -181,13 +192,9 @@ export async function getAvailability(
     { data: settings },
   ] = await Promise.all([
     admin
-      .from("professionals")
-      .select("id, active")
-      .eq("id", professionalId)
-      .maybeSingle(),
-    admin
       .from("services")
       .select("id, name, active, duration_minutes, price_cents")
+      .eq("shop_id", shopId)
       .in("id", uniqueIds),
     admin
       .from("service_weekday_prices")
@@ -202,6 +209,7 @@ export async function getAvailability(
     admin
       .from("business_hours")
       .select("active, open_time, close_time")
+      .eq("shop_id", shopId)
       .eq("weekday", weekday)
       .maybeSingle(),
     admin
@@ -212,10 +220,12 @@ export async function getAvailability(
     admin
       .from("schedule_exceptions")
       .select("professional_id, kind, start_time, end_time")
+      .eq("shop_id", shopId)
       .eq("date", date),
     admin
       .from("appointments")
       .select("id, start_time, end_time")
+      .eq("shop_id", shopId)
       .eq("professional_id", professionalId)
       .eq("date", date)
       .in("status", [...ACTIVE_APPOINTMENT_STATUSES])
@@ -223,14 +233,15 @@ export async function getAvailability(
     admin
       .from("schedule_blocks")
       .select("start_time, end_time")
+      .eq("shop_id", shopId)
       .eq("professional_id", professionalId)
       .eq("date", date),
-    admin.from("shop_settings").select("slot_step_minutes").single(),
+    admin
+      .from("shops")
+      .select("slot_step_minutes")
+      .eq("id", shopId)
+      .maybeSingle(),
   ]);
-
-  if (!professional || !professional.active) {
-    return { ok: false, error: "Profissional não encontrado.", status: 404 };
-  }
 
   const foundServices = services ?? [];
   if (

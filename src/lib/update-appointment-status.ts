@@ -36,7 +36,8 @@ type LoadedAppointment = {
 };
 
 async function loadAppointmentForStatusUpdate(
-  appointmentId: string
+  appointmentId: string,
+  shopId: string
 ): Promise<
   | { ok: true; data: LoadedAppointment }
   | { ok: false; error: string; status: number }
@@ -59,6 +60,7 @@ async function loadAppointmentForStatusUpdate(
     `
     )
     .eq("id", appointmentId)
+    .eq("shop_id", shopId)
     .maybeSingle();
 
   if (!appointment) {
@@ -138,6 +140,7 @@ export async function applyAppointmentStatusUpdate(input: {
   appointmentId: string;
   status: AppointmentWorkflowStatus;
   asOwner: boolean;
+  shopId: string;
   restrictToProfessionalId?: string | null;
 }): Promise<ApplyAppointmentStatusResult> {
   const parsed = appointmentWorkflowStatusSchema.safeParse(input.status);
@@ -145,7 +148,10 @@ export async function applyAppointmentStatusUpdate(input: {
     return { ok: false, error: "Status inválido.", status: 400 };
   }
 
-  const loaded = await loadAppointmentForStatusUpdate(input.appointmentId);
+  const loaded = await loadAppointmentForStatusUpdate(
+    input.appointmentId,
+    input.shopId
+  );
   if (!loaded.ok) return loaded;
 
   const check = loaded.data;
@@ -189,7 +195,8 @@ export async function applyAppointmentStatusUpdate(input: {
   const { error } = await admin
     .from("appointments")
     .update({ status: parsed.data })
-    .eq("id", input.appointmentId);
+    .eq("id", input.appointmentId)
+    .eq("shop_id", input.shopId);
 
   if (error) {
     if (error.code === "23P01") {

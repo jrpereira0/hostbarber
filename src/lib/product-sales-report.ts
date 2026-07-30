@@ -43,6 +43,7 @@ function firstOrSelf<T>(value: T | T[] | null | undefined): T | null {
 
 export async function getProductSalesReport(
   admin: SupabaseClient,
+  shopId: string,
   from: string,
   to: string
 ): Promise<ProductSalesReport> {
@@ -67,11 +68,13 @@ export async function getProductSalesReport(
       comandas!inner (
         id,
         status,
-        service_date
+        service_date,
+        shop_id
       )
     `
     )
     .eq("comandas.status", "closed")
+    .eq("comandas.shop_id", shopId)
     .not("product_id", "is", null)
     .gte("comandas.service_date", from)
     .lte("comandas.service_date", to);

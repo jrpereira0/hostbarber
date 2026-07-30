@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, Scissors } from "lucide-react";
 import { requireServerClient } from "@/lib/supabase/server";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/admin/page-header";
 import { EmptyState } from "@/components/admin/empty-state";
@@ -12,21 +14,28 @@ import { cn } from "@/lib/utils";
 export const metadata = { title: "Serviços" };
 
 export default async function ServicesPage() {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const supabase = await requireServerClient();
 
-  const [{ data: services }, { data: weekdayPriceRows }] = await Promise.all([
-    supabase
-      .from("services")
-      .select(
-        "id, name, description, price_cents, price_from, duration_minutes, photo_url, photo_position, active, professional_services(professional_id, professionals(nickname))"
-      )
-      .order("name"),
-    supabase
-      .from("service_weekday_prices")
-      .select("service_id, weekday, price_cents"),
-  ]);
+  const { data: services } = await supabase
+    .from("services")
+    .select(
+      "id, name, description, price_cents, price_from, duration_minutes, photo_url, photo_position, active, professional_services(professional_id, professionals(nickname))"
+    )
+    .eq("shop_id", session.shopId)
+    .order("name");
+
+  const serviceIds = (services ?? []).map((s) => s.id);
+  const { data: weekdayPriceRows } =
+    serviceIds.length === 0
+      ? { data: [] as { service_id: string; weekday: number; price_cents: number }[] }
+      : await supabase
+          .from("service_weekday_prices")
+          .select("service_id, weekday, price_cents")
+          .in("service_id", serviceIds);
 
   const weekdayPricesByService = new Map<
     string,

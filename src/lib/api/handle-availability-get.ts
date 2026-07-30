@@ -3,6 +3,8 @@ import { z } from "zod";
 import { withPublicApiRouteGuard } from "@/lib/api/with-api-guard";
 import { getAnyProfessionalAvailability } from "@/lib/any-professional-booking";
 import { getAvailability } from "@/lib/get-availability";
+import { resolveShopIdFromRequest } from "@/lib/resolve-public-shop";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const querySchema = z
   .object({
@@ -54,12 +56,34 @@ export async function handleAvailabilityGet(request: NextRequest) {
         excludeAppointmentId,
       } = parsed.data;
 
+      let shopId: string | null = null;
+      const shopRef = await resolveShopIdFromRequest(request);
+      if (shopRef) {
+        shopId = shopRef.shopId;
+      } else if (professionalId) {
+        const admin = createAdminClient();
+        if (admin) {
+          const { data: pro } = await admin
+            .from("professionals")
+            .select("shop_id")
+            .eq("id", professionalId)
+            .maybeSingle();
+          shopId = (pro?.shop_id as string | undefined) ?? null;
+        }
+      }
+
+      if (!shopId) {
+        return NextResponse.json(
+          { error: "Informe a barbearia (shop=slug) ou um barbeiro válido." },
+          { status: 400 }
+        );
+      }
+
       const result = anyProfessional
-        ? await getAnyProfessionalAvailability(
-            date,
-            serviceIds,
-            excludeAppointmentId
-          )
+        ? await getAnyProfessionalAvailability(date, serviceIds, {
+            excludeAppointmentId,
+            shopId,
+          })
         : await getAvailability(
             professionalId!,
             date,

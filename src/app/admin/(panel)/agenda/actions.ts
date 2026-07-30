@@ -34,12 +34,6 @@ import {
   finalizeOpenComandaAfterAppointmentRemoved,
   syncOpenComandaAfterAppointmentEdit,
 } from "@/lib/comanda-service";
-import { scheduleAppointmentCreatedNotify } from "@/lib/notifications/appointment-created-webhook";
-import { scheduleAppointmentCancelledNotify } from "@/lib/notifications/appointment-cancelled-webhook";
-import {
-  captureAppointmentUpdateSnapshot,
-  scheduleAppointmentUpdatedNotify,
-} from "@/lib/notifications/appointment-updated-webhook";
 import {
   appointmentServiceRowsFromIds,
   expandServiceIdsFromRows,
@@ -112,6 +106,7 @@ async function assertCanManageAppointment(
     .from("appointments")
     .select("professional_id, status")
     .eq("id", appointmentId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!appointment) {
@@ -164,6 +159,7 @@ async function assertOwnsAppointment(
     `
     )
     .eq("id", appointmentId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!appointment) {
@@ -196,7 +192,8 @@ type InsertAppointmentResult =
 async function insertAppointment(
   data: z.infer<typeof createSchema>,
   durationMinutes: number,
-  isSqueezeIn: boolean
+  isSqueezeIn: boolean,
+  shopId: string
 ): Promise<InsertAppointmentResult> {
   console.log("[admin-appointment-create] iniciou criação admin", {
     isSqueezeIn,
@@ -220,6 +217,7 @@ async function insertAppointment(
     firstName: data.firstName,
     lastName: data.lastName,
     whatsapp: data.whatsapp,
+    shopId,
   });
 
   if (!customer.ok) {
@@ -229,6 +227,7 @@ async function insertAppointment(
   const { data: appointment, error } = await admin
     .from("appointments")
     .insert({
+      shop_id: shopId,
       professional_id: data.professionalId,
       customer_id: customer.customerId,
       customer_first_name: customer.firstName,
@@ -259,17 +258,16 @@ async function insertAppointment(
   );
 
   if (linkError) {
-    await admin.from("appointments").delete().eq("id", appointment.id);
+    await admin
+      .from("appointments")
+      .delete()
+      .eq("id", appointment.id)
+      .eq("shop_id", shopId);
     return { ok: false, error: "Não foi possível salvar os serviços." };
   }
 
   console.log("[admin-appointment-create] appointment criado:", appointment.id);
 
-  const source = isSqueezeIn ? "admin_squeeze_in" : "admin_agenda";
-  const createdId = appointment.id;
-
-  // Site/app confirmam na hora; WhatsApp barbeiro + push vão em segundo plano.
-  scheduleAppointmentCreatedNotify(createdId, source);
   revalidateAdminAgendaSoon();
   return { ok: true, appointmentId: appointment.id };
 }
@@ -296,10 +294,12 @@ async function validateCreateInput(
         .from("professionals")
         .select("id, active")
         .eq("id", input.professionalId)
+        .eq("shop_id", session.shopId)
         .maybeSingle(),
       admin
         .from("services")
         .select("id, name, active, duration_minutes")
+        .eq("shop_id", session.shopId)
         .in("id", uniqueIds),
       admin
         .from("professional_services")
@@ -405,7 +405,12 @@ export async function createNormalAppointment(input: {
       return { ok: false, error: OCCUPIED_SLOT_MESSAGE };
     }
 
-    return insertAppointment(parsed.data, validated.durationMinutes, false);
+    return insertAppointment(
+      parsed.data,
+      validated.durationMinutes,
+      false,
+      session.shopId
+    );
   }
 
   const availability = await getAvailability(
@@ -425,7 +430,8 @@ export async function createNormalAppointment(input: {
   return insertAppointment(
     parsed.data,
     validated.durationMinutes,
-    false
+    false,
+    session.shopId
   );
 }
 
@@ -468,7 +474,12 @@ export async function createSqueezeInAppointment(input: {
   );
   if (pastError) return pastError;
 
-  return insertAppointment(parsed.data, validated.durationMinutes, true);
+  return insertAppointment(
+    parsed.data,
+    validated.durationMinutes,
+    true,
+    session.shopId
+  );
 }
 
 const updateSchema = z.object({
@@ -521,7 +532,7 @@ export async function updateAppointment(input: {
   const { data: existing } = await admin
     .from("appointments")
     .select("date, is_squeeze_in")
-    .eq("id", parsed.data.appointmentId)
+    .eq("id", parsed.data.appointmentId).eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!existing) {
@@ -584,16 +595,12 @@ export async function updateAppointment(input: {
     firstName: parsed.data.firstName,
     lastName: parsed.data.lastName,
     whatsapp: parsed.data.whatsapp,
+    shopId: session.shopId,
   });
 
   if (!customer.ok) {
     return { ok: false, error: customer.error };
   }
-
-  const previousSnapshot = await captureAppointmentUpdateSnapshot(
-    admin,
-    parsed.data.appointmentId
-  );
 
   const { error } = await admin
     .from("appointments")
@@ -606,7 +613,7 @@ export async function updateAppointment(input: {
       start_time: parsed.data.startTime,
       end_time: endTime,
     })
-    .eq("id", parsed.data.appointmentId);
+    .eq("id", parsed.data.appointmentId).eq("shop_id", session.shopId);
 
   if (error) {
     if (error.code === "23P01") {
@@ -646,14 +653,6 @@ export async function updateAppointment(input: {
       appointmentId: parsed.data.appointmentId,
       error: syncError,
     });
-  }
-
-  if (previousSnapshot) {
-    scheduleAppointmentUpdatedNotify(
-      parsed.data.appointmentId,
-      existing.is_squeeze_in ? "admin_squeeze_update" : "admin_update",
-      previousSnapshot
-    );
   }
 
   revalidateAdminAgendaSoon();
@@ -708,7 +707,7 @@ export async function moveAppointment(input: {
       appointment_services ( service_id, quantity )
       `
     )
-    .eq("id", parsed.data.appointmentId)
+    .eq("id", parsed.data.appointmentId).eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!existing) {
@@ -781,11 +780,6 @@ export async function moveAppointment(input: {
     };
   }
 
-  const previousSnapshot = await captureAppointmentUpdateSnapshot(
-    admin,
-    parsed.data.appointmentId
-  );
-
   const { error } = await admin
     .from("appointments")
     .update({
@@ -793,7 +787,7 @@ export async function moveAppointment(input: {
       start_time: parsed.data.startTime,
       end_time: minutesToTime(endMinutes),
     })
-    .eq("id", parsed.data.appointmentId);
+    .eq("id", parsed.data.appointmentId).eq("shop_id", session.shopId);
 
   if (error) {
     if (error.code === "23P01") {
@@ -812,14 +806,6 @@ export async function moveAppointment(input: {
       appointmentId: parsed.data.appointmentId,
       error: syncError,
     });
-  }
-
-  if (previousSnapshot) {
-    scheduleAppointmentUpdatedNotify(
-      parsed.data.appointmentId,
-      existing.is_squeeze_in ? "admin_squeeze_update" : "admin_update",
-      previousSnapshot
-    );
   }
 
   revalidateAdminAndPublicAgendaSoon();
@@ -872,6 +858,7 @@ export async function createScheduleBlock(input: {
     .from("professionals")
     .select("id, active")
     .eq("id", parsed.data.professionalId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!professional?.active) {
@@ -879,6 +866,7 @@ export async function createScheduleBlock(input: {
   }
 
   const { error } = await admin.from("schedule_blocks").insert({
+    shop_id: session.shopId,
     professional_id: parsed.data.professionalId,
     date: parsed.data.date,
     start_time: parsed.data.startTime,
@@ -909,6 +897,7 @@ export async function deleteScheduleBlock(
     .from("schedule_blocks")
     .select("professional_id")
     .eq("id", blockId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!block) {
@@ -919,7 +908,11 @@ export async function deleteScheduleBlock(
     return { ok: false, error: "Você não pode remover este bloqueio." };
   }
 
-  const { error } = await admin.from("schedule_blocks").delete().eq("id", blockId);
+  const { error } = await admin
+    .from("schedule_blocks")
+    .delete()
+    .eq("id", blockId)
+    .eq("shop_id", session.shopId);
 
   if (error) {
     return { ok: false, error: "Não foi possível remover o bloqueio." };
@@ -970,7 +963,7 @@ export async function cancelAppointment(input: {
   const { data: aptInfo } = await admin
     .from("appointments")
     .select("is_squeeze_in")
-    .eq("id", appointmentId)
+    .eq("id", appointmentId).eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (aptInfo?.is_squeeze_in) {
@@ -1001,7 +994,7 @@ export async function cancelAppointment(input: {
         cancellation_reason: reason,
         cancelled_at: cancelledAt,
       })
-      .eq("id", appointmentId);
+      .eq("id", appointmentId).eq("shop_id", session.shopId);
 
     if (error) {
       return { ok: false, error: "Não foi possível cancelar o agendamento." };
@@ -1010,12 +1003,6 @@ export async function cancelAppointment(input: {
     console.log("[admin-appointment-cancel] appointment cancelado:", appointmentId);
 
     await detachEncaixeFromOpenComandas(admin, appointmentId);
-
-    scheduleAppointmentCancelledNotify(
-      appointmentId,
-      "admin_squeeze_cancel",
-      reason
-    );
 
     revalidateAdminAndPublicAgendaSoon();
     return { ok: true };
@@ -1057,7 +1044,7 @@ export async function cancelAppointment(input: {
       cancellation_reason: reason,
       cancelled_at: cancelledAt,
     })
-    .eq("id", appointmentId);
+    .eq("id", appointmentId).eq("shop_id", session.shopId);
 
   if (error) {
     return { ok: false, error: "Não foi possível cancelar o agendamento." };
@@ -1074,6 +1061,7 @@ export async function cancelAppointment(input: {
         cancelled_at: cancelledAt,
       })
       .in("id", squeezeIds)
+      .eq("shop_id", session.shopId)
       .eq("is_squeeze_in", true);
   }
 
@@ -1085,15 +1073,6 @@ export async function cancelAppointment(input: {
 
   if (comanda?.id) {
     await finalizeOpenComandaAfterAppointmentRemoved(admin, comanda.id);
-  }
-
-  scheduleAppointmentCancelledNotify(appointmentId, "admin_cancel", reason);
-  for (const squeezeId of squeezeIds) {
-    scheduleAppointmentCancelledNotify(
-      squeezeId,
-      "admin_squeeze_cancel",
-      reason
-    );
   }
 
   revalidateAdminAndPublicAgendaSoon();
@@ -1150,7 +1129,7 @@ export async function cancelAppointmentService(input: {
       appointment_services ( service_id, quantity )
     `
     )
-    .eq("id", appointmentId)
+    .eq("id", appointmentId).eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!appointment) {
@@ -1214,6 +1193,7 @@ export async function cancelAppointmentService(input: {
   const { data: foundServices } = await admin
     .from("services")
     .select("id, duration_minutes")
+    .eq("shop_id", session.shopId)
     .in("id", uniqueIds);
 
   if (!foundServices || foundServices.length !== uniqueIds.length) {
@@ -1226,8 +1206,6 @@ export async function cancelAppointmentService(input: {
   const durationMinutes = sumDurationForServiceIds(remainingIds, durationById);
   const startMinutes = timeToMinutes(formatTime(appointment.start_time));
   const endTime = minutesToTime(startMinutes + durationMinutes);
-
-  const snapshot = await captureAppointmentUpdateSnapshot(admin, appointmentId);
 
   await admin
     .from("appointment_services")
@@ -1245,7 +1223,7 @@ export async function cancelAppointmentService(input: {
   const { error: updateError } = await admin
     .from("appointments")
     .update({ end_time: endTime })
-    .eq("id", appointmentId);
+    .eq("id", appointmentId).eq("shop_id", session.shopId);
 
   if (updateError) {
     return { ok: false, error: "Não foi possível atualizar o horário." };
@@ -1258,10 +1236,6 @@ export async function cancelAppointmentService(input: {
       "[admin-appointment-cancel-service] erro ao sincronizar comanda:",
       { appointmentId, error }
     );
-  }
-
-  if (snapshot) {
-    scheduleAppointmentUpdatedNotify(appointmentId, "admin_update", snapshot);
   }
 
   revalidateAdminAndPublicAgendaSoon();
@@ -1287,7 +1261,7 @@ export async function deleteAppointment(
   const { data: aptInfo } = await admin
     .from("appointments")
     .select("is_squeeze_in")
-    .eq("id", appointmentId)
+    .eq("id", appointmentId).eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (aptInfo?.is_squeeze_in) {
@@ -1315,7 +1289,7 @@ export async function deleteAppointment(
     const { error } = await admin
       .from("appointments")
       .delete()
-      .eq("id", appointmentId);
+      .eq("id", appointmentId).eq("shop_id", session.shopId);
 
     if (error) {
       return { ok: false, error: "Não foi possível excluir o agendamento." };
@@ -1359,7 +1333,11 @@ export async function deleteAppointment(
     .eq("appointment_id", appointmentId);
 
   if (squeezeIds.length > 0) {
-    await admin.from("appointments").delete().in("id", squeezeIds);
+    await admin
+      .from("appointments")
+      .delete()
+      .in("id", squeezeIds)
+      .eq("shop_id", session.shopId);
   }
 
   const openComandaId = comanda?.id ?? link?.comanda_id;
@@ -1370,7 +1348,7 @@ export async function deleteAppointment(
   const { error } = await admin
     .from("appointments")
     .delete()
-    .eq("id", appointmentId);
+    .eq("id", appointmentId).eq("shop_id", session.shopId);
 
   if (error) {
     return { ok: false, error: "Não foi possível excluir o agendamento." };
@@ -1407,6 +1385,7 @@ export async function moveAppointmentToDate(input: {
     .from("appointments")
     .select("id, date")
     .eq("id", parsed.data.appointmentId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!appointment) {
@@ -1450,29 +1429,20 @@ export async function moveAppointmentToDate(input: {
     .eq("appointment_id", parsed.data.appointmentId);
 
   if (squeezeIds.length > 0) {
-    await admin.from("appointments").delete().in("id", squeezeIds);
+    await admin
+      .from("appointments")
+      .delete()
+      .in("id", squeezeIds)
+      .eq("shop_id", session.shopId);
   }
-
-  const previousSnapshot = await captureAppointmentUpdateSnapshot(
-    admin,
-    parsed.data.appointmentId
-  );
 
   const { error } = await admin
     .from("appointments")
     .update({ date: parsed.data.newDate })
-    .eq("id", parsed.data.appointmentId);
+    .eq("id", parsed.data.appointmentId).eq("shop_id", session.shopId);
 
   if (error) {
     return { ok: false, error: "Não foi possível mudar a data do agendamento." };
-  }
-
-  if (previousSnapshot) {
-    scheduleAppointmentUpdatedNotify(
-      parsed.data.appointmentId,
-      "admin_update",
-      previousSnapshot
-    );
   }
 
   revalidateAdminAgendaSoon();
@@ -1498,6 +1468,7 @@ export async function updateAppointmentStatus(
     appointmentId,
     status: parsed.data,
     asOwner: canViewAllAgendas(session),
+    shopId: session.shopId,
     restrictToProfessionalId: canViewAllAgendas(session)
       ? null
       : session.professionalId,
@@ -1532,6 +1503,18 @@ export async function getEditAvailabilitySlots(input: {
       ok: false,
       error: "Você só pode editar agendamentos na sua própria agenda.",
     };
+  }
+
+  const admin = requireAdminClient();
+  if (isActionResult(admin)) return admin;
+  const { data: professional } = await admin
+    .from("professionals")
+    .select("id")
+    .eq("id", input.professionalId)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!professional) {
+    return { ok: false, error: "Profissional não encontrado." };
   }
 
   const result = await getAvailability(

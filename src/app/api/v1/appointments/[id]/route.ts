@@ -72,8 +72,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         rateLimit: "appointmentMutate",
         whatsapp,
       },
-      async () => {
-        const result = await updatePublicAppointment(id, parsed.data);
+      async ({ auth }) => {
+        const result = await updatePublicAppointment(
+          id,
+          parsed.data,
+          auth.shopId
+        );
 
         if (!result.ok) {
           return NextResponse.json(
@@ -110,8 +114,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         rateLimit: "appointmentMutate",
         whatsapp,
       },
-      async () => {
-        const result = await cancelPublicAppointment(id, whatsapp);
+      async ({ auth }) => {
+        const result = await cancelPublicAppointment(id, whatsapp, auth.shopId);
 
         if (!result.ok) {
           return NextResponse.json(

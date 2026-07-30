@@ -4,6 +4,7 @@ import { withPublicApiRouteGuard } from "@/lib/api/with-api-guard";
 import { TIMEZONE } from "@/lib/availability";
 import { MAX_DAYS_AHEAD } from "@/lib/get-availability";
 import { getShopCatalog } from "@/lib/get-shop-catalog";
+import { resolveShopIdFromRequest } from "@/lib/resolve-public-shop";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getSiteUrl } from "@/lib/site-url";
 
@@ -17,8 +18,7 @@ function absoluteAssetUrl(pathOrUrl: string | null): string | null {
 }
 
 /**
- * GET /api/v1/shop — dados públicos da loja pra bootstrap do app / site.
- * Público. Scope opcional: catalog:read.
+ * GET /api/v1/shop?shop=slug — dados públicos da loja.
  */
 export async function GET(request: NextRequest) {
   return safeApiRoute(() =>
@@ -33,10 +33,26 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        const catalog = await getShopCatalog();
+        const shopRef = await resolveShopIdFromRequest(request);
+        if (!shopRef) {
+          return NextResponse.json(
+            { error: "Informe a barbearia (?shop=slug)." },
+            { status: 400 }
+          );
+        }
+
+        const catalog = await getShopCatalog(shopRef.shopId);
+        if (!catalog.shop.id) {
+          return NextResponse.json(
+            { error: "Barbearia não encontrada." },
+            { status: 404 }
+          );
+        }
 
         return NextResponse.json({
           shop: {
+            id: catalog.shop.id,
+            slug: catalog.shop.slug,
             name: catalog.shop.name,
             bio: catalog.shop.bio || null,
             address: catalog.shop.address || null,

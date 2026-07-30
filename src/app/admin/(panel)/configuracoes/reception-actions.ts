@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient, requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
-import { requireOwner, type ActionResult } from "@/lib/require-owner";
+import { requireOwnerSession, type ActionResult } from "@/lib/require-owner";
 
 const SETTINGS_PATH = "/admin/configuracoes";
 
@@ -23,8 +23,8 @@ export type ReceptionStaffItem = {
 export async function listReceptionStaff(): Promise<
   { ok: true; staff: ReceptionStaffItem[] } | ActionResult
 > {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
@@ -33,6 +33,7 @@ export async function listReceptionStaff(): Promise<
     .from("profiles")
     .select("id, full_name")
     .eq("role", "reception")
+    .eq("shop_id", session.shopId)
     .order("full_name");
 
   if (error) {
@@ -57,8 +58,8 @@ export async function createReceptionStaff(input: {
   email: string;
   password: string;
 }): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const parsed = receptionSchema.safeParse(input);
   if (!parsed.success) {
@@ -88,6 +89,7 @@ export async function createReceptionStaff(input: {
     id: created.user.id,
     full_name: parsed.data.fullName,
     role: "reception",
+    shop_id: session.shopId,
   });
 
   if (profileError) {
@@ -102,8 +104,8 @@ export async function createReceptionStaff(input: {
 export async function deleteReceptionStaff(
   profileId: string
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const id = z.uuid().safeParse(profileId);
   if (!id.success) {
@@ -117,6 +119,7 @@ export async function deleteReceptionStaff(
     .from("profiles")
     .select("id, role")
     .eq("id", id.data)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!profile || profile.role !== "reception") {
@@ -128,7 +131,11 @@ export async function deleteReceptionStaff(
     return { ok: false, error: "Não foi possível remover o login." };
   }
 
-  await admin.from("profiles").delete().eq("id", id.data);
+  await admin
+    .from("profiles")
+    .delete()
+    .eq("id", id.data)
+    .eq("shop_id", session.shopId);
 
   revalidatePath(SETTINGS_PATH);
   return { ok: true };
@@ -138,8 +145,8 @@ export async function resetReceptionPassword(input: {
   profileId: string;
   password: string;
 }): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const parsed = z
     .object({
@@ -159,6 +166,7 @@ export async function resetReceptionPassword(input: {
     .from("profiles")
     .select("role")
     .eq("id", parsed.data.profileId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (profile?.role !== "reception") {
@@ -178,9 +186,9 @@ export async function resetReceptionPassword(input: {
 }
 
 /** Usado na page de configurações (server). */
-export async function loadReceptionStaffForSettings(): Promise<
-  ReceptionStaffItem[]
-> {
+export async function loadReceptionStaffForSettings(
+  shopId: string
+): Promise<ReceptionStaffItem[]> {
   const admin = createAdminClient();
   if (!admin) return [];
 
@@ -188,6 +196,7 @@ export async function loadReceptionStaffForSettings(): Promise<
     .from("profiles")
     .select("id, full_name")
     .eq("role", "reception")
+    .eq("shop_id", shopId)
     .order("full_name");
 
   const staff: ReceptionStaffItem[] = [];

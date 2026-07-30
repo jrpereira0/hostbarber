@@ -20,26 +20,59 @@ export type ServicePriceRow = {
 export async function loadServicePricingContext(
   admin: SupabaseClient,
   date: string,
-  serviceIds?: string[]
+  serviceIds?: string[],
+  shopId?: string
 ): Promise<ServicePricingContext> {
   const weekday = weekdayOf(date);
 
-  let pricesQuery = admin
-    .from("service_weekday_prices")
-    .select("service_id, price_cents")
-    .eq("weekday", weekday);
+  let pricesForDay: { service_id: string; price_cents: number }[] | null = null;
+  let configuredRows: { service_id: string }[] | null = null;
 
-  let configuredQuery = admin.from("service_weekday_prices").select("service_id");
+  if (shopId) {
+    let pricesQuery = admin
+      .from("service_weekday_prices")
+      .select("service_id, price_cents, services!inner(shop_id)")
+      .eq("weekday", weekday)
+      .eq("services.shop_id", shopId);
 
-  if (serviceIds?.length) {
-    pricesQuery = pricesQuery.in("service_id", serviceIds);
-    configuredQuery = configuredQuery.in("service_id", serviceIds);
+    let configuredQuery = admin
+      .from("service_weekday_prices")
+      .select("service_id, services!inner(shop_id)")
+      .eq("services.shop_id", shopId);
+
+    if (serviceIds?.length) {
+      pricesQuery = pricesQuery.in("service_id", serviceIds);
+      configuredQuery = configuredQuery.in("service_id", serviceIds);
+    }
+
+    const [pricesResult, configuredResult] = await Promise.all([
+      pricesQuery,
+      configuredQuery,
+    ]);
+    pricesForDay = pricesResult.data;
+    configuredRows = configuredResult.data;
+  } else {
+    let pricesQuery = admin
+      .from("service_weekday_prices")
+      .select("service_id, price_cents")
+      .eq("weekday", weekday);
+
+    let configuredQuery = admin
+      .from("service_weekday_prices")
+      .select("service_id");
+
+    if (serviceIds?.length) {
+      pricesQuery = pricesQuery.in("service_id", serviceIds);
+      configuredQuery = configuredQuery.in("service_id", serviceIds);
+    }
+
+    const [pricesResult, configuredResult] = await Promise.all([
+      pricesQuery,
+      configuredQuery,
+    ]);
+    pricesForDay = pricesResult.data;
+    configuredRows = configuredResult.data;
   }
-
-  const [{ data: pricesForDay }, { data: configuredRows }] = await Promise.all([
-    pricesQuery,
-    configuredQuery,
-  ]);
 
   return {
     weekday,

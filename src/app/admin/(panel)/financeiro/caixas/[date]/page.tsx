@@ -58,6 +58,16 @@ export default async function CaixaDetalhePage({
   }
 
   const adminSession = await getAdminSession();
+  if (!adminSession) {
+    return (
+      <EmptyState
+        icon={Wallet}
+        title="Sessão expirada"
+        description="Faça login de novo para ver o caixa."
+      />
+    );
+  }
+
   const [
     cashSession,
     openCashRegister,
@@ -67,14 +77,13 @@ export default async function CaixaDetalhePage({
     professionalsResult,
     pricingContext,
   ] = await Promise.all([
-    getCashRegisterSession(admin, date),
-    getOpenCashRegisterSession(admin),
-    adminSession
-      ? loadCashRegisterResponsibleOptions(admin, adminSession.userId)
-      : Promise.resolve([]),
+    getCashRegisterSession(admin, adminSession.shopId, date),
+    getOpenCashRegisterSession(admin, adminSession.shopId),
+    loadCashRegisterResponsibleOptions(admin, adminSession.shopId, adminSession.userId),
     admin
       .from("services")
       .select("id, name, duration_minutes, price_cents, photo_url, photo_position")
+      .eq("shop_id", adminSession.shopId)
       .eq("active", true)
       .order("name"),
     admin
@@ -82,6 +91,7 @@ export default async function CaixaDetalhePage({
       .select(
         "id, name, price_cents, commission_percent, stock_quantity, photo_url, photo_position, product_categories ( id, name )"
       )
+      .eq("shop_id", adminSession.shopId)
       .eq("active", true)
       .order("name"),
     admin
@@ -89,12 +99,13 @@ export default async function CaixaDetalhePage({
       .select(
         "id, nickname, photo_url, photo_position, commission_percent, professional_services ( service_id )"
       )
+      .eq("shop_id", adminSession.shopId)
       .eq("active", true)
       .order("nickname"),
-    loadServicePricingContext(admin, date),
+    loadServicePricingContext(admin, date, undefined, adminSession.shopId),
   ]);
 
-  const cash = await getCashRegisterSummary(admin, date, {
+  const cash = await getCashRegisterSummary(admin, adminSession.shopId, date, {
     cashRegisterSessionId: cashSession?.id,
   });
 

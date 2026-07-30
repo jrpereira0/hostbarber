@@ -10,6 +10,7 @@ export type UpsertCustomerInput = {
   firstName: string;
   lastName: string;
   whatsapp: string;
+  shopId: string;
 };
 
 export type UpsertCustomerResult =
@@ -46,6 +47,10 @@ export async function upsertCustomer(
     return { ok: false, error: WHATSAPP_INVALID_MESSAGE };
   }
 
+  if (!input.shopId) {
+    return { ok: false, error: "Barbearia inválida." };
+  }
+
   const firstName = capitalizePersonName(input.firstName);
   const lastName = capitalizePersonName(input.lastName);
 
@@ -57,6 +62,7 @@ export async function upsertCustomer(
   const { data: existing, error: lookupError } = await admin
     .from("customers")
     .select("id, first_name, last_name")
+    .eq("shop_id", input.shopId)
     .in("whatsapp", whatsappLookupKeys(whatsapp))
     .limit(1)
     .maybeSingle();
@@ -94,6 +100,7 @@ export async function upsertCustomer(
   const { data: created, error } = await admin
     .from("customers")
     .insert({
+      shop_id: input.shopId,
       first_name: firstName,
       last_name: lastName,
       whatsapp,

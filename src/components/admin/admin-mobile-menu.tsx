@@ -27,7 +27,7 @@ export function AdminMobileMenu() {
     <header className="admin-mobile-topbar fixed top-0 left-0 z-50 flex h-14 w-full items-center justify-between gap-3 px-3 md:hidden">
       <BrandLogo
         href="/admin"
-        size="sm"
+        size="md"
         subtitle="Painel"
         className="min-w-0 shrink"
         nameClassName="admin-sidebar-brand-name text-[13px] text-[#f5f5f5]"

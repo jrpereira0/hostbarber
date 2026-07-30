@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FormSectionTitle } from "@/components/admin/form-section";
 import { compressImage } from "@/lib/compress-image";
-import { BRAND_ICON_PATH } from "@/lib/brand";
+import { DEFAULT_SHOP_LOGO_PATH } from "@/lib/brand";
 import { formatCep, formatWhatsapp } from "@/lib/format";
 import { fetchAddressByCep } from "@/lib/viacep";
 import { saveShopProfile } from "@/app/admin/(panel)/configuracoes/actions";
@@ -59,7 +59,7 @@ export function ShopProfileForm({ initialValues }: ShopProfileFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(
-    initialValues.logoUrl ?? BRAND_ICON_PATH
+    initialValues.logoUrl ?? DEFAULT_SHOP_LOGO_PATH
   );
   const [whatsapp, setWhatsapp] = useState(
     initialValues.whatsapp ? formatWhatsapp(initialValues.whatsapp) : ""
@@ -190,7 +190,7 @@ export function ShopProfileForm({ initialValues }: ShopProfileFormProps) {
                 id="shopName"
                 name="shopName"
                 defaultValue={initialValues.shopName}
-                placeholder="Ex: Dinho Barber Coffee"
+                placeholder="Ex: Barbearia do Centro"
                 required
                 disabled={saving}
                 className={ADMIN_SURFACE.input}

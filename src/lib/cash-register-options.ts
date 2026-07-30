@@ -3,6 +3,7 @@ import type { CashRegisterResponsibleOption } from "@/components/admin/open-cash
 
 export async function loadCashRegisterResponsibleOptions(
   admin: SupabaseClient,
+  shopId: string,
   ownerUserId: string
 ): Promise<CashRegisterResponsibleOption[]> {
   const [{ data: ownerProfile }, { data: professionals }] = await Promise.all([
@@ -14,6 +15,7 @@ export async function loadCashRegisterResponsibleOptions(
     admin
       .from("professionals")
       .select("id, nickname")
+      .eq("shop_id", shopId)
       .eq("active", true)
       .order("nickname"),
   ]);

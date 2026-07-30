@@ -32,8 +32,13 @@ export default async function MyAccountPage() {
       .from("professionals")
       .select("nickname, working_hours(weekday, start_time, end_time)")
       .eq("profile_id", user.id)
+      .eq("shop_id", session.shopId)
       .maybeSingle(),
-    supabase.from("business_hours").select("*").order("weekday"),
+    supabase
+      .from("business_hours")
+      .select("*")
+      .eq("shop_id", session.shopId)
+      .order("weekday"),
   ]);
 
   const businessDays: BusinessDay[] = (businessHours ?? []).map((b) => ({

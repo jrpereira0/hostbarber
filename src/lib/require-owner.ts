@@ -49,6 +49,17 @@ export async function assertOwnerPage(): Promise<void> {
   if (denied) redirect("/admin");
 }
 
+// Como requireOwner, mas devolve a sessão (com shopId) pra actions que
+// precisam escopar suas queries por loja.
+export async function requireOwnerSession(): Promise<ActionResult | AdminSession> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Você precisa estar logado." };
+  if (!session.isOwner) {
+    return { ok: false, error: "Apenas o dono pode fazer isso." };
+  }
+  return session;
+}
+
 /** Dono ou recepção — cadastro de clientes (sem crédito manual). */
 export async function assertCustomerManagerPage(): Promise<AdminSession> {
   const session = await getAdminSession();

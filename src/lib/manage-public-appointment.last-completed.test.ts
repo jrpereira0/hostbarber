@@ -46,7 +46,10 @@ describe("getLastCompletedAppointmentByWhatsapp", () => {
   it("retorna null quando não há atendimento concluído", async () => {
     mockMaybeSingle.mockResolvedValue({ data: null, error: null });
 
-    const result = await getLastCompletedAppointmentByWhatsapp("5513981008852");
+    const result = await getLastCompletedAppointmentByWhatsapp(
+      "5513981008852",
+      "shop-1"
+    );
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -76,7 +79,10 @@ describe("getLastCompletedAppointmentByWhatsapp", () => {
       error: null,
     });
 
-    const result = await getLastCompletedAppointmentByWhatsapp("5513981008852");
+    const result = await getLastCompletedAppointmentByWhatsapp(
+      "5513981008852",
+      "shop-1"
+    );
 
     expect(result.ok).toBe(true);
     if (result.ok && result.data) {
@@ -93,7 +99,7 @@ describe("getLastCompletedAppointmentByWhatsapp", () => {
   });
 
   it("retorna 400 para WhatsApp inválido", async () => {
-    const result = await getLastCompletedAppointmentByWhatsapp("abc");
+    const result = await getLastCompletedAppointmentByWhatsapp("abc", "shop-1");
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

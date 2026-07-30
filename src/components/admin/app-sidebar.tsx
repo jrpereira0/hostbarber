@@ -98,6 +98,8 @@ type AppSidebarProps = {
   role: AdminRole;
   userName: string;
   userEmail: string;
+  /** Link público da agenda desta loja (`/agenda/{slug}`). */
+  bookingHref?: string;
 };
 
 function isNavActive(pathname: string, url: string): boolean {
@@ -112,7 +114,12 @@ function roleLabel(role: AdminRole): string {
   return "Barbeiro";
 }
 
-export function AppSidebar({ role, userName, userEmail }: AppSidebarProps) {
+export function AppSidebar({
+  role,
+  userName,
+  userEmail,
+  bookingHref = BOOKING_PATH,
+}: AppSidebarProps) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
   const isOwner = role === "owner";
@@ -162,7 +169,7 @@ export function AppSidebar({ role, userName, userEmail }: AppSidebarProps) {
             <SidebarMenuButton size="lg" asChild>
               <Link href="/admin" className="min-w-0">
                 <BrandLogo
-                  size="sm"
+                  size="md"
                   subtitle="Painel"
                   className="min-w-0 text-sidebar-foreground"
                   nameClassName="admin-sidebar-brand-name text-sidebar-foreground"
@@ -229,7 +236,7 @@ export function AppSidebar({ role, userName, userEmail }: AppSidebarProps) {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip="Página de agendamento">
                     <a
-                      href={BOOKING_PATH}
+                      href={bookingHref}
                       target="_blank"
                       rel="noopener noreferrer"
                     >

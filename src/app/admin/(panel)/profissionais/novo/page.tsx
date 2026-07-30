@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { requireServerClient } from "@/lib/supabase/server";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { PageHeader } from "@/components/admin/page-header";
 import { AdminFormPage } from "@/components/admin/admin-form-layout";
 import { ProfessionalForm } from "@/components/admin/professional-form";
@@ -11,16 +13,23 @@ import { createProfessional } from "../actions";
 export const metadata = { title: "Novo profissional" };
 
 export default async function NewProfessionalPage() {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const supabase = await requireServerClient();
   const [{ data: services }, { data: businessHours }] = await Promise.all([
     supabase
       .from("services")
       .select("id, name")
+      .eq("shop_id", session.shopId)
       .eq("active", true)
       .order("name"),
-    supabase.from("business_hours").select("*").order("weekday"),
+    supabase
+      .from("business_hours")
+      .select("*")
+      .eq("shop_id", session.shopId)
+      .order("weekday"),
   ]);
 
   return (

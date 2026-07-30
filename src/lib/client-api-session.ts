@@ -2,11 +2,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { normalizeWhatsapp } from "@/lib/whatsapp";
 
 export const CLIENT_SESSION_COOKIE = "agenda_client_session";
-/** Sessão após OTP: cliente fica logado ~14 dias no mesmo aparelho. */
+/** Sessão do cliente no site /agenda (~14 dias no mesmo aparelho). */
 export const CLIENT_SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type ClientSessionPayload = {
   whatsapp: string;
+  /** Loja em que o cliente autenticou (isolamento multi-loja). */
+  shopId: string;
   exp: number;
 };
 
@@ -24,12 +26,17 @@ function signPayload(payload: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-export function createClientSessionToken(whatsapp: string): string | null {
+export function createClientSessionToken(
+  whatsapp: string,
+  shopId: string
+): string | null {
   const normalized = normalizeWhatsapp(whatsapp);
-  if (!normalized) return null;
+  const shop = shopId.trim();
+  if (!normalized || !shop) return null;
 
   const payload: ClientSessionPayload = {
     whatsapp: normalized,
+    shopId: shop,
     exp: Date.now() + CLIENT_SESSION_TTL_MS,
   };
 
@@ -64,11 +71,13 @@ export function verifyClientSessionToken(
   try {
     const payload = JSON.parse(
       Buffer.from(encoded, "base64url").toString("utf8")
-    ) as ClientSessionPayload;
+    ) as Partial<ClientSessionPayload>;
 
     if (
       typeof payload.whatsapp !== "string" ||
+      typeof payload.shopId !== "string" ||
       typeof payload.exp !== "number" ||
+      !payload.shopId.trim() ||
       !normalizeWhatsapp(payload.whatsapp)
     ) {
       return null;
@@ -78,6 +87,7 @@ export function verifyClientSessionToken(
 
     return {
       whatsapp: normalizeWhatsapp(payload.whatsapp)!,
+      shopId: payload.shopId.trim(),
       exp: payload.exp,
     };
   } catch {
@@ -105,13 +115,12 @@ export function extractBearerToken(request: Request): string | null {
 
 /**
  * Lê sessão do cliente: cookie (site) ou Bearer com token de sessão (app).
- * Não confunde com chave de API (`dbc_live_...`).
  */
 export function readClientSessionFromRequest(
   request: Request
 ): ClientSessionPayload | null {
   const bearer = extractBearerToken(request);
-  if (bearer && !bearer.startsWith("dbc_live_")) {
+  if (bearer) {
     const fromBearer = verifyClientSessionToken(bearer);
     if (fromBearer) return fromBearer;
   }

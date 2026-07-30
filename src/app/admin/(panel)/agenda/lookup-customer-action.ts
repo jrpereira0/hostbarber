@@ -58,6 +58,7 @@ export async function getCustomerAgendaSummary(
   const { data } = await admin
     .from("customers")
     .select("id, credit_balance_cents")
+    .eq("shop_id", session.shopId)
     .eq("whatsapp", whatsapp)
     .maybeSingle();
 
@@ -85,7 +86,7 @@ export async function lookupCustomerForAdmin(
     return { ok: false, error: WHATSAPP_INVALID_MESSAGE };
   }
 
-  const result = await lookupCustomerByWhatsapp(whatsapp);
+  const result = await lookupCustomerByWhatsapp(whatsapp, session.shopId);
   if (!result.found) {
     return { ok: true, found: false };
   }
@@ -138,6 +139,7 @@ export async function searchCustomersForAdmin(
     const { data, error } = await admin
       .from("customers")
       .select("id, first_name, last_name, whatsapp")
+      .eq("shop_id", session.shopId)
       .like("whatsapp", `%${digits}`)
       .order("first_name")
       .limit(30);
@@ -158,6 +160,7 @@ export async function searchCustomersForAdmin(
     const { data, error } = await admin
       .from("customers")
       .select("id, first_name, last_name, whatsapp")
+      .eq("shop_id", session.shopId)
       .or(filters.join(","))
       .order("first_name")
       .limit(40);

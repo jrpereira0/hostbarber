@@ -1,8 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireServerClient } from "@/lib/supabase/server";
 import { requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { PageHeader } from "@/components/admin/page-header";
 import { AdminFormPage } from "@/components/admin/admin-form-layout";
 import { ProfessionalForm } from "@/components/admin/professional-form";
@@ -28,7 +29,9 @@ export default async function EditProfessionalPage({
   params,
   searchParams,
 }: PageProps) {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const { id } = await params;
   const { from: fromParam, to: toParam } = await searchParams;
@@ -51,13 +54,19 @@ export default async function EditProfessionalPage({
           "id, first_name, last_name, nickname, whatsapp, email, instagram, photo_url, photo_position, commission_percent, can_book_clients, can_create_squeeze_in, can_open_comanda, can_edit_comanda, can_close_comanda, can_edit_appointments, can_cancel_appointments, can_manage_schedule_blocks, professional_services(service_id), working_hours(weekday, start_time, end_time)"
         )
         .eq("id", id)
+        .eq("shop_id", session.shopId)
         .single(),
       supabase
         .from("services")
         .select("id, name")
+        .eq("shop_id", session.shopId)
         .eq("active", true)
         .order("name"),
-      supabase.from("business_hours").select("*").order("weekday"),
+      supabase
+        .from("business_hours")
+        .select("*")
+        .eq("shop_id", session.shopId)
+        .order("weekday"),
     ]);
 
   if (!professional) notFound();
@@ -88,8 +97,8 @@ export default async function EditProfessionalPage({
 
   if (!isActionResult(admin)) {
     const [report, payoutRows] = await Promise.all([
-      getCommissionReport(admin, from, to, professional.id),
-      listProfessionalCommissionPayouts(admin, professional.id),
+      getCommissionReport(admin, session.shopId, from, to, professional.id),
+      listProfessionalCommissionPayouts(admin, session.shopId, professional.id),
     ]);
     openCommissionCents =
       report.professionals[0]?.summary.commissionCents ?? 0;

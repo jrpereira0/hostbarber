@@ -2,6 +2,7 @@ import { requireServerClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/admin/page-header";
 import { SettingsView } from "@/components/admin/settings-view";
 import { assertOwnerSettingsPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
 import { formatCep, formatTime } from "@/lib/format";
 import { ADMIN_SURFACE } from "@/lib/admin-surface";
 import { cn } from "@/lib/utils";
@@ -9,14 +10,19 @@ import type { BusinessDay } from "@/components/admin/business-hours-form";
 import type { ExceptionItem } from "@/components/admin/exceptions-card";
 import { DEFAULT_CONFIRMATION_WHATSAPP_MESSAGE } from "@/lib/confirmation-message";
 import { loadReceptionStaffForSettings } from "@/app/admin/(panel)/configuracoes/reception-actions";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "Configurações" };
 
 export default async function SettingsPage() {
   await assertOwnerSettingsPage();
 
+  const session = await getAdminSession();
+  if (!session?.isOwner) redirect("/admin");
+
   const supabase = await requireServerClient();
   const today = new Date().toISOString().slice(0, 10);
+  const shopId = session.shopId;
 
   const [
     { data: businessHours },
@@ -25,10 +31,15 @@ export default async function SettingsPage() {
     { data: settings },
     receptionStaff,
   ] = await Promise.all([
-    supabase.from("business_hours").select("*").order("weekday"),
+    supabase
+      .from("business_hours")
+      .select("*")
+      .eq("shop_id", shopId)
+      .order("weekday"),
     supabase
       .from("professionals")
       .select("id, nickname")
+      .eq("shop_id", shopId)
       .eq("active", true)
       .order("nickname"),
     supabase
@@ -36,10 +47,11 @@ export default async function SettingsPage() {
       .select(
         "id, date, kind, start_time, end_time, note, professionals(nickname)"
       )
+      .eq("shop_id", shopId)
       .gte("date", today)
       .order("date"),
-    supabase.from("shop_settings").select("*").single(),
-    loadReceptionStaffForSettings(),
+    supabase.from("shops").select("*").eq("id", shopId).single(),
+    loadReceptionStaffForSettings(shopId),
   ]);
 
   const businessDays: BusinessDay[] = (businessHours ?? []).map((b) => ({
@@ -75,8 +87,9 @@ export default async function SettingsPage() {
         />
 
         <SettingsView
+          slug={settings?.slug ?? ""}
           profile={{
-            shopName: settings?.shop_name ?? "",
+            shopName: settings?.name ?? "",
             bio: settings?.bio ?? "",
             cep: settings?.cep ? formatCep(settings.cep) : "",
             street: settings?.street ?? "",

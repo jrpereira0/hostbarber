@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { requireServerClient } from "@/lib/supabase/server";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/admin/page-header";
 import { EmptyState } from "@/components/admin/empty-state";
@@ -12,7 +14,9 @@ import { cn } from "@/lib/utils";
 export const metadata = { title: "Profissionais" };
 
 export default async function ProfessionalsPage() {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const supabase = await requireServerClient();
 
@@ -21,6 +25,7 @@ export default async function ProfessionalsPage() {
     .select(
       "id, first_name, last_name, nickname, whatsapp, email, instagram, photo_url, photo_position, active, professional_services(service_id, services(name))"
     )
+    .eq("shop_id", session.shopId)
     .order("nickname");
 
   const list = professionals ?? [];

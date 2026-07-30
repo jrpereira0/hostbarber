@@ -1,5 +1,5 @@
 {
-  "name": "agendabarbearia",
+  "name": "hostbarber",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,15 +9,13 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:api:protected": "node scripts/test-protected-api.mjs",
     "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
     "db:migrate-weekday-prices": "node --env-file=.env.local scripts/migrate-service-weekday-prices.mjs",
     "db:reset-shop": "node --env-file=.env.local scripts/reset-shop-data.mjs",
     "create-admin": "node --env-file=.env.local scripts/create-admin.mjs",
-    "test:api:customer-by-whatsapp": "node scripts/test-customer-by-whatsapp.mjs"
+    "create-platform-admin": "node --env-file=.env.local scripts/create-platform-admin.mjs"
   },
   "dependencies": {
-    "@scalar/api-reference-react": "^0.9.59",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "class-variance-authority": "^0.7.1",

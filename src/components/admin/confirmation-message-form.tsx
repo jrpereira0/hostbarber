@@ -44,7 +44,7 @@ export function ConfirmationMessageForm({
     date: "2026-07-28",
     startTime: "15:00",
     serviceNames: ["Corte", "Barba"],
-    shopName: shopName || "Dinho Barber Coffee",
+    shopName: shopName || "Barbearia",
   });
 
   function insertTag(tag: string) {

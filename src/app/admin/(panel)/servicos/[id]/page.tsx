@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireServerClient } from "@/lib/supabase/server";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { PageHeader } from "@/components/admin/page-header";
 import { AdminFormPage } from "@/components/admin/admin-form-layout";
 import { ServiceForm } from "@/components/admin/service-form";
@@ -15,7 +16,9 @@ export default async function EditServicePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const { id } = await params;
   const supabase = await requireServerClient();
@@ -32,13 +35,19 @@ export default async function EditServicePage({
         "id, name, description, price_cents, price_from, duration_minutes, photo_url, photo_position, professional_services(professional_id)"
       )
       .eq("id", id)
+      .eq("shop_id", session.shopId)
       .single(),
     supabase
       .from("professionals")
       .select("id, nickname")
+      .eq("shop_id", session.shopId)
       .eq("active", true)
       .order("nickname"),
-    supabase.from("business_hours").select("weekday, active").order("weekday"),
+    supabase
+      .from("business_hours")
+      .select("weekday, active")
+      .eq("shop_id", session.shopId)
+      .order("weekday"),
     supabase
       .from("service_weekday_prices")
       .select("weekday, price_cents")

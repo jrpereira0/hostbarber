@@ -12,7 +12,7 @@ const ctx = {
   date: "2026-07-28",
   startTime: "15:00:00",
   serviceNames: ["Corte", "Barba", "Corte"],
-  shopName: "Dinho Barber Coffee",
+  shopName: "Barbearia Exemplo",
 };
 
 describe("applyConfirmationTags", () => {
@@ -22,7 +22,7 @@ describe("applyConfirmationTags", () => {
       ctx
     );
     expect(text).toContain("Olá Éder!");
-    expect(text).toContain("Dinho Barber Coffee");
+    expect(text).toContain("Barbearia Exemplo");
     expect(text).toContain("28/07/2026");
     expect(text).toContain("15:00");
     expect(text).toContain("Corte ×2, Barba");

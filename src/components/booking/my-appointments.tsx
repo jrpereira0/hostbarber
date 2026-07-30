@@ -35,6 +35,7 @@ import {
 } from "@/lib/availability";
 import type { PublicAppointmentItem } from "@/lib/manage-public-appointment";
 import type { ShopCatalog } from "@/lib/get-shop-catalog";
+import { withShopQuery } from "@/lib/booking-path";
 import { cn } from "@/lib/utils";
 
 const MAX_DAYS_AHEAD = 60;
@@ -80,6 +81,7 @@ function statusTone(status?: string): { bg: string; text: string } {
 }
 
 export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
+  const shopSlug = catalog.shop.slug;
   const maxDate = addDays(today, MAX_DAYS_AHEAD);
   const minDate = useMemo(
     () =>
@@ -172,7 +174,7 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
       setLoadingList(true);
       try {
         const res = await fetch(
-          `/api/v1/appointments?whatsapp=${encodeURIComponent(canonical)}&mode=${tab}`,
+          withShopQuery(`/api/v1/appointments?whatsapp=${encodeURIComponent(canonical)}&mode=${tab}`, shopSlug),
           { credentials: "include" }
         );
         const body = await res.json();
@@ -193,7 +195,7 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
         setLoadingList(false);
       }
     },
-    []
+    [shopSlug]
   );
 
   const handleAuthenticated = useCallback(
@@ -229,7 +231,7 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
 
       try {
         const res = await fetch(
-          `/api/v1/appointments/availability?${params}`,
+          withShopQuery(`/api/v1/appointments/availability?${params}`, shopSlug),
           { signal: controller.signal }
         );
         const body = await res.json();
@@ -262,7 +264,7 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
     void loadSlots();
 
     return () => controller.abort();
-  }, [step, editing, editDate, editServiceIds]);
+  }, [step, editing, editDate, editServiceIds, shopSlug]);
 
   function startEdit(appointment: PublicAppointmentItem) {
     setEditing(appointment);
@@ -302,7 +304,7 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
 
     try {
       const res = await fetch(
-        `/api/v1/appointments/${cancelTarget.id}?whatsapp=${encodeURIComponent(whatsappDigits)}`,
+        withShopQuery(`/api/v1/appointments/${cancelTarget.id}?whatsapp=${encodeURIComponent(whatsappDigits)}`, shopSlug),
         { method: "DELETE", credentials: "include" }
       );
       const body = await res.json();
@@ -333,7 +335,7 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
     setSaving(true);
 
     try {
-      const res = await fetch(`/api/v1/appointments/${editing.id}`, {
+      const res = await fetch(withShopQuery(`/api/v1/appointments/${editing.id}`, shopSlug), {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -378,8 +380,9 @@ export function MyAppointments({ catalog, today }: MyAppointmentsProps) {
 
         <div className="mt-8">
           <ClientWhatsappAuth
+          shopSlug={shopSlug}
             onAuthenticated={handleAuthenticated}
-            hint="Enviamos um código no WhatsApp. Depois disso você fica logado neste aparelho."
+            hint="Informe seu WhatsApp pra ver e gerenciar seus horários neste aparelho."
           />
           {loadingList ? (
             <p className="mt-4 text-sm text-muted-foreground">Carregando...</p>

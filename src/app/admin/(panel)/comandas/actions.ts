@@ -31,10 +31,11 @@ import { getCustomerCreditBalanceByWhatsapp } from "@/lib/customer-credit-servic
 import { requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
 import { requireAdmin, canViewAllAgendas } from "@/lib/require-admin";
-import { requireOwner, type ActionResult } from "@/lib/require-owner";
+import type { ActionResult } from "@/lib/require-owner";
 import { assertPermission } from "@/lib/professional-permissions";
 import { formatTime } from "@/lib/format";
 import type { AppointmentItem } from "@/components/admin/appointment-item";
+import { parseBookingSource } from "@/lib/booking-source";
 
 const itemSchema = z
   .object({
@@ -94,10 +95,24 @@ async function assertBarberComandaAccess(
   comandaId: string,
   session: Awaited<ReturnType<typeof requireAdmin>>
 ): Promise<ActionResult | null> {
-  if (!("userId" in session) || canViewAllAgendas(session)) return null;
+  if (!("userId" in session)) return null;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
+
+  if (canViewAllAgendas(session)) {
+    // Dono/recepção enxergam tudo da própria loja — mas não de outra.
+    const { data } = await admin
+      .from("comandas")
+      .select("id")
+      .eq("id", comandaId)
+      .eq("shop_id", session.shopId)
+      .maybeSingle();
+    if (!data) {
+      return { ok: false, error: "Comanda não encontrada." };
+    }
+    return null;
+  }
 
   if (!session.professionalId) {
     return { ok: false, error: "Você não pode alterar esta comanda." };
@@ -117,6 +132,7 @@ async function assertBarberComandaAccess(
     `
     )
     .eq("id", comandaId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!data) {
@@ -177,12 +193,12 @@ export async function loadComandaForAppointment(
   }
 
   const creditPromise = customerWhatsappHint
-    ? getCustomerCreditBalanceByWhatsapp(admin, customerWhatsappHint)
+    ? getCustomerCreditBalanceByWhatsapp(admin, session.shopId, customerWhatsappHint)
     : null;
 
   const [result, openCashRegister] = await Promise.all([
-    getComandaForAppointment(admin, appointmentId),
-    getOpenCashRegisterSessionBasic(admin),
+    getComandaForAppointment(admin, appointmentId, session.shopId),
+    getOpenCashRegisterSessionBasic(admin, session.shopId),
   ]);
   if (!result.ok) return { ok: false, error: result.error };
 
@@ -203,6 +219,7 @@ export async function loadComandaForAppointment(
     : result.comanda.customerWhatsapp
       ? await getCustomerCreditBalanceByWhatsapp(
           admin,
+          session.shopId,
           result.comanda.customerWhatsapp
         )
       : 0;
@@ -214,6 +231,7 @@ export async function loadComandaForAppointment(
     canManageAllAgendas: canViewAllAgendas(session),
     cashRegisterOpen: await canCloseComandaInOpenCashRegister(
       admin,
+      session.shopId,
       result.comanda.serviceDate,
       openCashRegister
     ),
@@ -248,9 +266,13 @@ export async function loadComandaById(
 
   const [result, openCashRegister] = await Promise.all([
     getComandaById(admin, comandaId, { sync: false }),
-    getOpenCashRegisterSessionBasic(admin),
+    getOpenCashRegisterSessionBasic(admin, session.shopId),
   ]);
   if (!result.ok) return { ok: false, error: result.error };
+
+  if (result.comanda.shopId !== session.shopId) {
+    return { ok: false, error: "Comanda não encontrada." };
+  }
 
   if (!canViewAllAgendas(session)) {
     if (!session.professionalId) {
@@ -271,6 +293,7 @@ export async function loadComandaById(
     canManageAllAgendas: canViewAllAgendas(session),
     cashRegisterOpen: await canCloseComandaInOpenCashRegister(
       admin,
+      session.shopId,
       result.comanda.serviceDate,
       openCashRegister
     ),
@@ -278,6 +301,7 @@ export async function loadComandaById(
     customerCreditBalanceCents: result.comanda.customerWhatsapp
       ? await getCustomerCreditBalanceByWhatsapp(
           admin,
+          session.shopId,
           result.comanda.customerWhatsapp
         )
       : 0,
@@ -317,8 +341,8 @@ export async function startWalkInComanda(
   }
 
   const [created, openCashRegister] = await Promise.all([
-    createWalkInComanda(admin, serviceDate),
-    getOpenCashRegisterSessionBasic(admin),
+    createWalkInComanda(admin, session.shopId, serviceDate),
+    getOpenCashRegisterSessionBasic(admin, session.shopId),
   ]);
   if (!created.ok) return { ok: false, error: created.error };
 
@@ -331,6 +355,7 @@ export async function startWalkInComanda(
     canManageAllAgendas: canViewAllAgendas(session),
     cashRegisterOpen: await canCloseComandaInOpenCashRegister(
       admin,
+      session.shopId,
       created.comanda.serviceDate,
       openCashRegister
     ),
@@ -356,6 +381,11 @@ export async function discardEmptyWalkInComandaAction(
     return { ok: false, error: admin.error };
   }
 
+  const accessDenied = await assertBarberComandaAccess(comandaId, session);
+  if (accessDenied && !accessDenied.ok) {
+    return { ok: false, error: accessDenied.error };
+  }
+
   return discardEmptyWalkInComanda(admin, comandaId);
 }
 
@@ -374,6 +404,11 @@ export async function deleteOpenWalkInComandaAction(
   const admin = requireAdminClient();
   if (isActionResult(admin)) {
     return { ok: false, error: admin.error };
+  }
+
+  const accessDenied = await assertBarberComandaAccess(comandaId, session);
+  if (accessDenied && !accessDenied.ok) {
+    return { ok: false, error: accessDenied.error };
   }
 
   const result = await deleteOpenWalkInComanda(admin, comandaId);
@@ -573,16 +608,30 @@ export async function reopenComandaAction(
     }
 > {
   try {
-    const denied = await requireOwner();
-    if (denied !== null) {
-      return denied.ok === false
-        ? { ok: false, error: denied.error }
-        : { ok: false, error: "Sem permissão." };
+    const session = await requireAdmin();
+    if (!("userId" in session)) {
+      return {
+        ok: false,
+        error: "error" in session ? session.error : "Erro.",
+      };
+    }
+    if (!session.isOwner) {
+      return { ok: false, error: "Apenas o dono pode reabrir comandas." };
     }
 
     const admin = requireAdminClient();
     if (isActionResult(admin)) {
       return { ok: false, error: admin.error };
+    }
+
+    const { data: comandaRow } = await admin
+      .from("comandas")
+      .select("id")
+      .eq("id", comandaId)
+      .eq("shop_id", session.shopId)
+      .maybeSingle();
+    if (!comandaRow) {
+      return { ok: false, error: "Comanda não encontrada." };
     }
 
     const result = await reopenComanda(admin, comandaId, options);
@@ -626,6 +675,7 @@ export async function previewComandaTotals(
     .from("professionals")
     .select("commission_percent")
     .eq("id", professionalId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   return calculateComandaTotals(items, data?.commission_percent ?? 50);
@@ -678,6 +728,7 @@ export async function loadAppointmentItemAction(
     `
     )
     .eq("id", appointmentId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (error || !data) {
@@ -723,8 +774,7 @@ export async function loadAppointmentItemAction(
     status: data.status as AppointmentItem["status"],
     isSqueezeIn: data.is_squeeze_in ?? false,
     isComandaExtra: data.is_comanda_extra ?? false,
-    bookingSource:
-      (data.booking_source as AppointmentItem["bookingSource"]) ?? null,
+    bookingSource: parseBookingSource(data.booking_source),
     services: (data.appointment_services ?? []).flatMap((row) => {
       const quantity = Math.max(1, row.quantity ?? 1);
       const raw = row.services as

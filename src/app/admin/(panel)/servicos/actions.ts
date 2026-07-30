@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient, requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
-import { requireOwner, type ActionResult } from "@/lib/require-owner";
+import { requireOwnerSession, type ActionResult } from "@/lib/require-owner";
 import {
   minWeekdayPrice,
   parseWeekdayPricesForm,
@@ -26,9 +26,13 @@ const serviceSchema = z.object({
 });
 
 async function loadOpenWeekdays(
-  admin: NonNullable<ReturnType<typeof createAdminClient>>
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  shopId: string
 ) {
-  const { data } = await admin.from("business_hours").select("weekday, active");
+  const { data } = await admin
+    .from("business_hours")
+    .select("weekday, active")
+    .eq("shop_id", shopId);
   return (data ?? [])
     .filter((row) => row.active)
     .map((row) => row.weekday);
@@ -61,7 +65,11 @@ function parseServiceForm(formData: FormData, openWeekdays: number[]) {
   };
 }
 
-async function syncProfessionals(serviceId: string, professionalIds: string[]) {
+async function syncProfessionals(
+  serviceId: string,
+  professionalIds: string[],
+  shopId: string
+) {
   const admin = createAdminClient();
   if (!admin) return;
   await admin
@@ -70,12 +78,24 @@ async function syncProfessionals(serviceId: string, professionalIds: string[]) {
     .eq("service_id", serviceId);
 
   if (professionalIds.length > 0) {
-    await admin.from("professional_services").insert(
-      professionalIds.map((professionalId) => ({
+    // Só vincula profissionais que realmente pertencem à loja do serviço.
+    const { data: validProfessionals } = await admin
+      .from("professionals")
+      .select("id")
+      .eq("shop_id", shopId)
+      .in("id", professionalIds);
+
+    const validIds = new Set((validProfessionals ?? []).map((p) => p.id));
+    const rows = professionalIds
+      .filter((id) => validIds.has(id))
+      .map((professionalId) => ({
         professional_id: professionalId,
         service_id: serviceId,
-      }))
-    );
+      }));
+
+    if (rows.length > 0) {
+      await admin.from("professional_services").insert(rows);
+    }
   }
 }
 
@@ -110,13 +130,13 @@ async function uploadPhoto(serviceId: string, photo: File): Promise<string | nul
 }
 
 export async function createService(formData: FormData): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
 
-  const openWeekdays = await loadOpenWeekdays(admin);
+  const openWeekdays = await loadOpenWeekdays(admin, session.shopId);
   const parsed = parseServiceForm(formData, openWeekdays);
   if (!parsed.ok) {
     return { ok: false, error: parsed.error };
@@ -125,6 +145,7 @@ export async function createService(formData: FormData): Promise<ActionResult> {
   const { data: service, error } = await admin
     .from("services")
     .insert({
+      shop_id: session.shopId,
       name: parsed.data.name,
       description: parsed.data.description,
       price_cents: minWeekdayPrice(parsed.data.weekdayPrices),
@@ -146,17 +167,19 @@ export async function createService(formData: FormData): Promise<ActionResult> {
       await admin
         .from("services")
         .update({ photo_url: url, photo_position: photoPosition })
-        .eq("id", service.id);
+        .eq("id", service.id)
+        .eq("shop_id", session.shopId);
     }
   } else {
     await admin
       .from("services")
       .update({ photo_position: photoPosition })
-      .eq("id", service.id);
+      .eq("id", service.id)
+      .eq("shop_id", session.shopId);
   }
 
   await syncWeekdayPrices(service.id, parsed.data.weekdayPrices);
-  await syncProfessionals(service.id, parsed.data.professionalIds);
+  await syncProfessionals(service.id, parsed.data.professionalIds, session.shopId);
 
   revalidatePath("/admin/servicos");
   return { ok: true };
@@ -166,13 +189,21 @@ export async function updateService(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
 
-  const openWeekdays = await loadOpenWeekdays(admin);
+  const { data: current } = await admin
+    .from("services")
+    .select("id")
+    .eq("id", id)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!current) return { ok: false, error: "Serviço não encontrado." };
+
+  const openWeekdays = await loadOpenWeekdays(admin, session.shopId);
   const parsed = parseServiceForm(formData, openWeekdays);
   if (!parsed.ok) {
     return { ok: false, error: parsed.error };
@@ -195,11 +226,15 @@ export async function updateService(
     if (url) updates.photo_url = url;
   }
 
-  const { error } = await admin.from("services").update(updates).eq("id", id);
+  const { error } = await admin
+    .from("services")
+    .update(updates)
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
   if (error) return { ok: false, error: `Erro ao salvar: ${error.message}` };
 
   await syncWeekdayPrices(id, parsed.data.weekdayPrices);
-  await syncProfessionals(id, parsed.data.professionalIds);
+  await syncProfessionals(id, parsed.data.professionalIds, session.shopId);
 
   revalidatePath("/admin/servicos");
   return { ok: true };
@@ -209,12 +244,16 @@ export async function setServiceActive(
   id: string,
   active: boolean
 ): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
-  const { error } = await admin.from("services").update({ active }).eq("id", id);
+  const { error } = await admin
+    .from("services")
+    .update({ active })
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/servicos");
@@ -222,11 +261,19 @@ export async function setServiceActive(
 }
 
 export async function deleteService(id: string): Promise<ActionResult> {
-  const denied = await requireOwner();
-  if (denied) return denied;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
+
+  const { data: current } = await admin
+    .from("services")
+    .select("id")
+    .eq("id", id)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+  if (!current) return { ok: false, error: "Serviço não encontrado." };
 
   const { count } = await admin
     .from("appointment_services")
@@ -241,7 +288,11 @@ export async function deleteService(id: string): Promise<ActionResult> {
     };
   }
 
-  const { error } = await admin.from("services").delete().eq("id", id);
+  const { error } = await admin
+    .from("services")
+    .delete()
+    .eq("id", id)
+    .eq("shop_id", session.shopId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/servicos");

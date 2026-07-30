@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
-import { requireOwner, type ActionResult } from "@/lib/require-owner";
+import { requireOwnerSession, type ActionResult } from "@/lib/require-owner";
 import {
   canManageCustomers,
   requireAdmin,
@@ -29,6 +29,7 @@ async function requireCustomerManager(): Promise<
   }
   return session;
 }
+
 
 const customerSchema = z.object({
   firstName: z.string().trim().min(1, "Informe o nome."),
@@ -68,6 +69,7 @@ export async function createCustomer(formData: FormData): Promise<ActionResult> 
   const { firstName, lastName } = parsedCustomerNames(parsed.data);
 
   const { error } = await admin.from("customers").insert({
+    shop_id: session.shopId,
     first_name: firstName,
     last_name: lastName,
     whatsapp: parsed.data.whatsapp,
@@ -116,6 +118,7 @@ export async function updateCustomer(
     .from("customers")
     .select("id")
     .eq("id", customerId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!existing) {
@@ -132,7 +135,8 @@ export async function updateCustomer(
       whatsapp: parsed.data.whatsapp,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", customerId);
+    .eq("id", customerId)
+    .eq("shop_id", session.shopId);
 
   if (error) {
     if (error.code === "23505") {
@@ -151,7 +155,8 @@ export async function updateCustomer(
       customer_last_name: lastName,
       customer_whatsapp: parsed.data.whatsapp,
     })
-    .eq("customer_id", customerId);
+    .eq("customer_id", customerId)
+    .eq("shop_id", session.shopId);
 
   revalidatePath("/admin/clientes");
   revalidatePath(`/admin/clientes/${customerId}`);
@@ -160,11 +165,22 @@ export async function updateCustomer(
 }
 
 export async function deleteCustomer(customerId: string): Promise<ActionResult> {
-  const auth = await requireOwner();
-  if (auth) return auth;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const admin = requireAdminClient();
   if (isActionResult(admin)) return admin;
+
+  const { data: customer } = await admin
+    .from("customers")
+    .select("id")
+    .eq("id", customerId)
+    .eq("shop_id", session.shopId)
+    .maybeSingle();
+
+  if (!customer) {
+    return { ok: false, error: "Cliente não encontrado." };
+  }
 
   // Só bloqueia visitas concluídas ou horários ainda ativos.
   // Cancelados não impedem (o vínculo some com ON DELETE SET NULL).
@@ -172,6 +188,7 @@ export async function deleteCustomer(customerId: string): Promise<ActionResult> 
     .from("appointments")
     .select("id", { count: "exact", head: true })
     .eq("customer_id", customerId)
+    .eq("shop_id", session.shopId)
     .eq("status", "done");
 
   if (doneError) {
@@ -190,6 +207,7 @@ export async function deleteCustomer(customerId: string): Promise<ActionResult> 
     .from("appointments")
     .select("id", { count: "exact", head: true })
     .eq("customer_id", customerId)
+    .eq("shop_id", session.shopId)
     .in("status", ["scheduled", "confirmed"]);
 
   if (activeError) {
@@ -204,7 +222,11 @@ export async function deleteCustomer(customerId: string): Promise<ActionResult> 
     };
   }
 
-  const { error } = await admin.from("customers").delete().eq("id", customerId);
+  const { error } = await admin
+    .from("customers")
+    .delete()
+    .eq("id", customerId)
+    .eq("shop_id", session.shopId);
 
   if (error) {
     console.error("deleteCustomer", error);
@@ -225,8 +247,8 @@ export async function addManualCreditAction(
   amountCents: number,
   description?: string
 ): Promise<ActionResult> {
-  const auth = await requireOwner();
-  if (auth) return auth;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const parsed = manualCreditSchema.safeParse({ amountCents, description });
   if (!parsed.success) {
@@ -240,6 +262,7 @@ export async function addManualCreditAction(
     .from("customers")
     .select("id")
     .eq("id", customerId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!customer) {
@@ -266,8 +289,8 @@ export async function removeManualCreditAction(
   amountCents: number,
   description?: string
 ): Promise<ActionResult> {
-  const auth = await requireOwner();
-  if (auth) return auth;
+  const session = await requireOwnerSession();
+  if (!("userId" in session)) return session;
 
   const parsed = manualCreditSchema.safeParse({ amountCents, description });
   if (!parsed.success) {
@@ -281,6 +304,7 @@ export async function removeManualCreditAction(
     .from("customers")
     .select("id, credit_balance_cents")
     .eq("id", customerId)
+    .eq("shop_id", session.shopId)
     .maybeSingle();
 
   if (!customer) {

@@ -3,6 +3,7 @@ import { safeApiRoute } from "@/lib/api/safe-route";
 import { withPublicApiRouteGuard } from "@/lib/api/with-api-guard";
 import { TIMEZONE } from "@/lib/availability";
 import { getShopCatalog } from "@/lib/get-shop-catalog";
+import { resolveShopIdFromRequest } from "@/lib/resolve-public-shop";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { z } from "zod";
 
@@ -42,7 +43,15 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        const catalog = await getShopCatalog();
+        const shopRef = await resolveShopIdFromRequest(request);
+        if (!shopRef) {
+          return NextResponse.json(
+            { error: "Informe a barbearia (?shop=slug)." },
+            { status: 400 }
+          );
+        }
+
+        const catalog = await getShopCatalog(shopRef.shopId);
         const { serviceId } = parsed.data;
 
         if (serviceId) {

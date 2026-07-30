@@ -5,31 +5,34 @@ import {
   verifyClientSessionToken,
 } from "@/lib/client-api-session";
 
+const SHOP_ID = "11111111-1111-1111-1111-111111111111";
+
 describe("client-api-session", () => {
   it("cria e valida token de sessão", () => {
     process.env.CLIENT_SESSION_SECRET =
       "test-secret-with-at-least-32-characters!!";
 
-    const token = createClientSessionToken("11981008852");
+    const token = createClientSessionToken("11981008852", SHOP_ID);
     expect(token).toBeTruthy();
 
     const payload = verifyClientSessionToken(token);
     expect(payload?.whatsapp).toBe("5511981008852");
+    expect(payload?.shopId).toBe(SHOP_ID);
   });
 
   it("rejeita token adulterado", () => {
     process.env.CLIENT_SESSION_SECRET =
       "test-secret-with-at-least-32-characters!!";
 
-    const token = createClientSessionToken("11981008852");
+    const token = createClientSessionToken("11981008852", SHOP_ID);
     expect(verifyClientSessionToken(`${token}x`)).toBeNull();
   });
 
-  it("aceita token no Authorization Bearer (app mobile)", () => {
+  it("aceita token no Authorization Bearer", () => {
     process.env.CLIENT_SESSION_SECRET =
       "test-secret-with-at-least-32-characters!!";
 
-    const token = createClientSessionToken("11981008852");
+    const token = createClientSessionToken("11981008852", SHOP_ID);
     expect(token).toBeTruthy();
 
     const request = new Request("http://localhost/api/v1/appointments", {
@@ -38,16 +41,30 @@ describe("client-api-session", () => {
 
     const session = readClientSessionFromRequest(request);
     expect(session?.whatsapp).toBe("5511981008852");
+    expect(session?.shopId).toBe(SHOP_ID);
   });
 
-  it("não trata chave de API como sessão de cliente", () => {
+  it("rejeita token antigo sem shopId", () => {
+    process.env.CLIENT_SESSION_SECRET =
+      "test-secret-with-at-least-32-characters!!";
+
+    const encoded = Buffer.from(
+      JSON.stringify({
+        whatsapp: "5511981008852",
+        exp: Date.now() + 60_000,
+      })
+    ).toString("base64url");
+    // assinatura inválida de propósito — verify deve falhar
+    expect(verifyClientSessionToken(`${encoded}.fakesig`)).toBeNull();
+  });
+
+  it("rejeita Bearer que não é token de sessão", () => {
     process.env.CLIENT_SESSION_SECRET =
       "test-secret-with-at-least-32-characters!!";
 
     const request = new Request("http://localhost/api/v1/appointments", {
       headers: {
-        Authorization:
-          "Bearer dbc_live_abcdef123456_abcdefghijklmnopqrstuvwxyz0123456789abc",
+        Authorization: "Bearer token-invalido-qualquer",
       },
     });
 

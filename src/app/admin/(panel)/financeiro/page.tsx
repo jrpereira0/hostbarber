@@ -1,7 +1,9 @@
+import { redirect } from "next/navigation";
 import { Wallet } from "lucide-react";
-import { assertOwnerPage } from "@/lib/require-owner";
+import { getAdminSession } from "@/lib/require-admin";
 import { requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
+import { LOGIN_PATH } from "@/lib/login-path";
 import { todayInTimezone } from "@/lib/availability";
 import { getFinanceMetricsReport } from "@/lib/finance-reports";
 import { parseFinanceMetric } from "@/lib/finance-metrics";
@@ -47,7 +49,9 @@ function normalizeRange(
 }
 
 export default async function FinanceiroPage({ searchParams }: PageProps) {
-  await assertOwnerPage();
+  const session = await getAdminSession();
+  if (!session) redirect(LOGIN_PATH);
+  if (!session.isOwner) redirect("/admin");
 
   const {
     from: fromParam,
@@ -76,10 +80,10 @@ export default async function FinanceiroPage({ searchParams }: PageProps) {
   }
 
   const [report, last7Report] = await Promise.all([
-    getFinanceMetricsReport(admin, from, to),
+    getFinanceMetricsReport(admin, session.shopId, from, to),
     coversLast7
       ? Promise.resolve(null)
-      : getFinanceMetricsReport(admin, last7From, today),
+      : getFinanceMetricsReport(admin, session.shopId, last7From, today),
   ]);
 
   const last7Days = coversLast7

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Outfit } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
-import { BRAND_ICON_PATH } from "@/lib/brand";
-import { getShopSeo } from "@/lib/get-shop-seo";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -23,31 +22,28 @@ const outfit = Outfit({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { name, shareDescription } = await getShopSeo();
   const siteUrl = getSiteUrl();
+  const description =
+    "HOSTBARBER — agenda online para barbearias: horários, clientes e painel em um só lugar.";
 
   return {
     metadataBase: siteUrl,
     title: {
-      default: name,
-      template: `%s | ${name}`,
+      default: PRODUCT_NAME,
+      template: `%s | ${PRODUCT_NAME}`,
     },
-    description: shareDescription,
-    icons: {
-      icon: BRAND_ICON_PATH,
-      apple: BRAND_ICON_PATH,
-    },
+    description,
     openGraph: {
       type: "website",
       locale: "pt_BR",
-      siteName: name,
-      title: name,
-      description: shareDescription,
+      siteName: PRODUCT_NAME,
+      title: PRODUCT_NAME,
+      description,
     },
     twitter: {
       card: "summary_large_image",
-      title: name,
-      description: shareDescription,
+      title: PRODUCT_NAME,
+      description,
     },
   };
 }

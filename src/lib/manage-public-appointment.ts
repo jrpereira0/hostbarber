@@ -20,11 +20,6 @@ import {
   whatsappMatches,
   whatsappSchema,
 } from "@/lib/whatsapp";
-import { scheduleAppointmentCancelledNotify } from "@/lib/notifications/appointment-cancelled-webhook";
-import {
-  captureAppointmentUpdateSnapshot,
-  notifyAppointmentUpdated,
-} from "@/lib/notifications/appointment-updated-webhook";
 
 const updateSchema = z.object({
   whatsapp: whatsappSchema,
@@ -142,7 +137,8 @@ function isUpcoming(date: string, startTime: string): boolean {
 
 async function loadOwnedAppointment(
   appointmentId: string,
-  whatsapp: string
+  whatsapp: string,
+  shopId: string
 ): Promise<
   | {
       id: string;
@@ -164,6 +160,7 @@ async function loadOwnedAppointment(
       "id, professional_id, date, start_time, status, is_squeeze_in, customer_whatsapp"
     )
     .eq("id", appointmentId)
+    .eq("shop_id", shopId)
     .maybeSingle();
 
   if (!data) return null;
@@ -178,7 +175,7 @@ async function loadOwnedAppointment(
 
 export async function listPublicAppointmentsByWhatsapp(
   rawWhatsapp: string,
-  options?: { mode?: ListAppointmentsMode; limit?: number }
+  options: { mode?: ListAppointmentsMode; limit?: number; shopId: string }
 ): Promise<
   Result<{ mode: ListAppointmentsMode; appointments: PublicAppointmentItem[] }>
 > {
@@ -191,6 +188,9 @@ export async function listPublicAppointmentsByWhatsapp(
   const whatsapp = normalizeWhatsapp(rawWhatsapp);
   if (!whatsapp) {
     return { ok: false, error: WHATSAPP_INVALID_MESSAGE, status: 400 };
+  }
+  if (!options.shopId.trim()) {
+    return { ok: false, error: "Barbearia não encontrada.", status: 400 };
   }
 
   const admin = createAdminClient();
@@ -217,6 +217,7 @@ export async function listPublicAppointmentsByWhatsapp(
       )
     `
     )
+    .eq("shop_id", options.shopId)
     .in("customer_whatsapp", whatsappLookupKeys(whatsapp))
     .eq("is_squeeze_in", false);
 
@@ -323,11 +324,15 @@ export async function listPublicAppointmentsByWhatsapp(
 }
 
 export async function getLastCompletedAppointmentByWhatsapp(
-  rawWhatsapp: string
+  rawWhatsapp: string,
+  shopId: string
 ): Promise<Result<LastCompletedAppointment | null>> {
   const whatsapp = normalizeWhatsapp(rawWhatsapp);
   if (!whatsapp) {
     return { ok: false, error: WHATSAPP_INVALID_MESSAGE, status: 400 };
+  }
+  if (!shopId.trim()) {
+    return { ok: false, error: "Barbearia não encontrada.", status: 400 };
   }
 
   const admin = createAdminClient();
@@ -350,6 +355,7 @@ export async function getLastCompletedAppointmentByWhatsapp(
       )
     `
     )
+    .eq("shop_id", shopId)
     .in("customer_whatsapp", whatsappLookupKeys(whatsapp))
     .eq("status", "done")
     .order("date", { ascending: false })
@@ -398,14 +404,15 @@ export async function getLastCompletedAppointmentByWhatsapp(
 
 export async function cancelPublicAppointment(
   appointmentId: string,
-  rawWhatsapp: string
+  rawWhatsapp: string,
+  shopId: string
 ): Promise<Result<{ id: string }>> {
   const whatsapp = normalizeWhatsapp(rawWhatsapp);
   if (!whatsapp) {
     return { ok: false, error: WHATSAPP_INVALID_MESSAGE, status: 400 };
   }
 
-  const existing = await loadOwnedAppointment(appointmentId, whatsapp);
+  const existing = await loadOwnedAppointment(appointmentId, whatsapp, shopId);
   if (!existing) {
     return {
       ok: false,
@@ -430,7 +437,8 @@ export async function cancelPublicAppointment(
   const { error } = await admin
     .from("appointments")
     .update({ status: "cancelled" })
-    .eq("id", appointmentId);
+    .eq("id", appointmentId)
+    .eq("shop_id", shopId);
 
   if (error) {
     return {
@@ -440,9 +448,6 @@ export async function cancelPublicAppointment(
     };
   }
 
-  // Avisos em segundo plano — site/app não esperam WhatsApp/push.
-  scheduleAppointmentCancelledNotify(appointmentId, "api_cancel");
-
   return { ok: true, data: { id: appointmentId } };
 }
 
@@ -450,7 +455,8 @@ export type UpdatePublicAppointmentInput = z.infer<typeof updateSchema>;
 
 export async function updatePublicAppointment(
   appointmentId: string,
-  input: UpdatePublicAppointmentInput
+  input: UpdatePublicAppointmentInput,
+  shopId: string
 ): Promise<Result<{ id: string }>> {
   const whatsapp = normalizeWhatsapp(input.whatsapp);
   if (!whatsapp) {
@@ -462,13 +468,33 @@ export async function updatePublicAppointment(
     return { ok: false, error: parsed.error.issues[0].message, status: 400 };
   }
 
-  const existing = await loadOwnedAppointment(appointmentId, parsed.data.whatsapp);
+  const existing = await loadOwnedAppointment(
+    appointmentId,
+    parsed.data.whatsapp,
+    shopId
+  );
   if (!existing) {
     return {
       ok: false,
       error: "Agendamento não encontrado ou não pode ser alterado.",
       status: 404,
     };
+  }
+
+  const admin = createAdminClient();
+  if (!admin) {
+    return { ok: false, error: "Sistema indisponível no momento.", status: 503 };
+  }
+
+  const { data: professional } = await admin
+    .from("professionals")
+    .select("id")
+    .eq("id", parsed.data.professionalId)
+    .eq("shop_id", shopId)
+    .maybeSingle();
+
+  if (!professional) {
+    return { ok: false, error: "Profissional não encontrado.", status: 404 };
   }
 
   const availability = await getAvailability(
@@ -506,16 +532,6 @@ export async function updatePublicAppointment(
     };
   }
 
-  const admin = createAdminClient();
-  if (!admin) {
-    return { ok: false, error: "Sistema indisponível no momento.", status: 503 };
-  }
-
-  const previousSnapshot = await captureAppointmentUpdateSnapshot(
-    admin,
-    appointmentId
-  );
-
   const endTime = minutesToTime(endMinutes);
 
   const { error } = await admin
@@ -526,7 +542,8 @@ export async function updatePublicAppointment(
       start_time: parsed.data.startTime,
       end_time: endTime,
     })
-    .eq("id", appointmentId);
+    .eq("id", appointmentId)
+    .eq("shop_id", shopId);
 
   if (error) {
     if (error.code === "23P01") {
@@ -569,23 +586,6 @@ export async function updatePublicAppointment(
       error: "Não foi possível salvar os serviços.",
       status: 500,
     };
-  }
-
-  // Alteração já salva — a partir daqui, uma falha ao notificar o barbeiro
-  // não pode desfazer a remarcação nem virar erro para o cliente.
-  if (previousSnapshot) {
-    try {
-      await notifyAppointmentUpdated(
-        appointmentId,
-        "api_update",
-        previousSnapshot
-      );
-    } catch (webhookError) {
-      console.error("[appointment-updated-webhook] erro ao enviar webhook:", {
-        appointmentId,
-        error: webhookError,
-      });
-    }
   }
 
   return { ok: true, data: { id: appointmentId } };

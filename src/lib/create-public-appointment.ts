@@ -4,7 +4,6 @@ import { minutesToTime, timeToMinutes } from "@/lib/availability";
 import { pickLeastBusyProfessionalForSlot } from "@/lib/any-professional-booking";
 import { getAvailability } from "@/lib/get-availability";
 import { upsertCustomer } from "@/lib/upsert-customer";
-import { scheduleAppointmentCreatedNotify } from "@/lib/notifications/appointment-created-webhook";
 import {
   normalizeWhatsapp,
   WHATSAPP_INVALID_MESSAGE,
@@ -21,7 +20,7 @@ const createSchema = z
     startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
     serviceIds: z.array(z.uuid()).min(1, "Escolha pelo menos um serviço."),
     firstName: z.string().trim().min(1, "Informe o nome."),
-    lastName: z.string().trim().optional().default(""),
+    lastName: z.string().trim().min(1, "Informe o sobrenome."),
     whatsapp: whatsappSchema,
   })
   .superRefine((data, ctx) => {
@@ -47,6 +46,7 @@ export type CreatePublicAppointmentResult =
   | { ok: false; error: string; status: number };
 
 async function insertAppointment(params: {
+  shopId: string;
   professionalId: string;
   customerId: string;
   firstName: string;
@@ -69,6 +69,7 @@ async function insertAppointment(params: {
   const { data: appointment, error } = await admin
     .from("appointments")
     .insert({
+      shop_id: params.shopId,
       professional_id: params.professionalId,
       customer_id: params.customerId,
       customer_first_name: params.firstName,
@@ -113,7 +114,6 @@ async function insertAppointment(params: {
     };
   }
 
-  scheduleAppointmentCreatedNotify(appointment.id, "public_api");
 
   return { ok: true, appointmentId: appointment.id };
 }
@@ -133,7 +133,7 @@ async function resolveProfessionalNickname(
 
 export async function createPublicAppointment(
   input: CreatePublicAppointmentInput,
-  options?: { bookingSource?: BookingSource }
+  options?: { bookingSource?: BookingSource; expectedShopId?: string }
 ): Promise<CreatePublicAppointmentResult> {
   const bookingSource = options?.bookingSource ?? "site";
   const whatsapp = normalizeWhatsapp(input.whatsapp);
@@ -156,10 +156,46 @@ export async function createPublicAppointment(
 
   const data = parsed.data;
 
+  const admin = createAdminClient();
+  if (!admin) {
+    return { ok: false, error: "Sistema indisponível no momento.", status: 503 };
+  }
+
+  // Resolve a loja pelo profissional (ou pelo serviço, no modo "qualquer barbeiro").
+  let shopId: string | null = null;
+  if (data.professionalId) {
+    const { data: pro } = await admin
+      .from("professionals")
+      .select("shop_id")
+      .eq("id", data.professionalId)
+      .maybeSingle();
+    shopId = pro?.shop_id ?? null;
+  } else if (data.serviceIds[0]) {
+    const { data: service } = await admin
+      .from("services")
+      .select("shop_id")
+      .eq("id", data.serviceIds[0])
+      .maybeSingle();
+    shopId = service?.shop_id ?? null;
+  }
+
+  if (!shopId) {
+    return { ok: false, error: "Barbearia não encontrada.", status: 404 };
+  }
+
+  if (options?.expectedShopId && options.expectedShopId !== shopId) {
+    return {
+      ok: false,
+      error: "Esse horário não pertence a esta barbearia.",
+      status: 403,
+    };
+  }
+
   const customer = await upsertCustomer({
     firstName: data.firstName,
     lastName: data.lastName,
     whatsapp: data.whatsapp,
+    shopId,
   });
 
   if (!customer.ok) {
@@ -175,7 +211,7 @@ export async function createPublicAppointment(
         data.date,
         data.startTime,
         data.serviceIds,
-        { excludeProfessionalIds: excluded }
+        { excludeProfessionalIds: excluded, shopId }
       );
 
       if (!pick.ok) return pick;
@@ -192,6 +228,7 @@ export async function createPublicAppointment(
       }
 
       const inserted = await insertAppointment({
+        shopId,
         professionalId: pick.professionalId,
         customerId: customer.customerId,
         firstName: customer.firstName,
@@ -264,6 +301,7 @@ export async function createPublicAppointment(
   }
 
   const inserted = await insertAppointment({
+    shopId,
     professionalId,
     customerId: customer.customerId,
     firstName: customer.firstName,

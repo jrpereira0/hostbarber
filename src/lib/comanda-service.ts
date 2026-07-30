@@ -14,7 +14,6 @@ import {
   PAYMENT_METHODS,
 } from "@/lib/comanda-types";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@/lib/appointment-status";
-import { scheduleAppointmentCreatedNotify } from "@/lib/notifications/appointment-created-webhook";
 import { assertComandaClosableInOpenCashRegister } from "@/lib/cash-register-service";
 import {
   addCustomerCredit,
@@ -32,6 +31,7 @@ import { applyProductStockDelta } from "@/lib/product-stock";
 
 type DbComandaRow = {
   id: string;
+  shop_id: string;
   appointment_id: string | null;
   professional_id: string | null;
   customer_whatsapp: string | null;
@@ -96,6 +96,7 @@ type DbComandaRow = {
 
 const COMANDA_SELECT = `
   id,
+  shop_id,
   appointment_id,
   professional_id,
   customer_whatsapp,
@@ -209,6 +210,7 @@ function mapComandaRow(
 
   return {
     id: row.id,
+    shopId: row.shop_id,
     appointmentId: row.appointment_id ?? primary?.id ?? "",
     professionalId: row.professional_id ?? primary?.professionalId ?? "",
     professionalNickname: pro?.nickname ?? primary?.professionalNickname ?? "—",
@@ -240,6 +242,7 @@ function mapComandaRow(
 
 async function loadCustomerDayEncaixes(
   admin: SupabaseClient,
+  shopId: string,
   customerWhatsapp: string | null,
   serviceDate: string,
   options: { includeDone?: boolean } = {}
@@ -265,6 +268,7 @@ async function loadCustomerDayEncaixes(
       professionals ( nickname )
     `
     )
+    .eq("shop_id", shopId)
     .eq("customer_whatsapp", customerWhatsapp)
     .eq("date", serviceDate)
     .eq("is_squeeze_in", true)
@@ -322,12 +326,14 @@ async function findExplicitComandaIdForAppointment(
 
 async function findOpenComandaIdForCustomerDay(
   admin: SupabaseClient,
+  shopId: string,
   customerWhatsapp: string,
   serviceDate: string
 ): Promise<string | null> {
   const { data } = await admin
     .from("comandas")
     .select("id")
+    .eq("shop_id", shopId)
     .eq("customer_whatsapp", customerWhatsapp)
     .eq("service_date", serviceDate)
     .eq("status", "open")
@@ -340,14 +346,16 @@ async function findOpenComandaIdForCustomerDay(
 
 export async function getComandaForAppointment(
   admin: SupabaseClient,
-  appointmentId: string
+  appointmentId: string,
+  shopId: string
 ): Promise<{ ok: true; comanda: ComandaDetail } | { ok: false; error: string; status: number }> {
   const { data: trigger } = await admin
     .from("appointments")
     .select(
-      "id, professional_id, status, customer_whatsapp, date, customer_first_name, customer_last_name"
+      "id, shop_id, professional_id, status, customer_whatsapp, date, customer_first_name, customer_last_name"
     )
     .eq("id", appointmentId)
+    .eq("shop_id", shopId)
     .maybeSingle();
 
   if (!trigger) {
@@ -388,6 +396,7 @@ export async function getComandaForAppointment(
 
 async function pruneStaleEncaixeComandaItems(
   admin: SupabaseClient,
+  shopId: string,
   comandaId: string,
   customerWhatsapp: string,
   serviceDate: string
@@ -395,6 +404,7 @@ async function pruneStaleEncaixeComandaItems(
   const { data: activeSqueeze } = await admin
     .from("appointments")
     .select("id")
+    .eq("shop_id", shopId)
     .eq("customer_whatsapp", customerWhatsapp)
     .eq("date", serviceDate)
     .eq("is_squeeze_in", true)
@@ -459,12 +469,14 @@ export async function detachEncaixeFromOpenComandas(
 
 async function syncManualEncaixeItemsToComanda(
   admin: SupabaseClient,
+  shopId: string,
   comandaId: string,
   customerWhatsapp: string,
   serviceDate: string
 ): Promise<void> {
   await pruneStaleEncaixeComandaItems(
     admin,
+    shopId,
     comandaId,
     customerWhatsapp,
     serviceDate
@@ -473,6 +485,7 @@ async function syncManualEncaixeItemsToComanda(
   const { data: squeezeApts } = await admin
     .from("appointments")
     .select("id, professional_id")
+    .eq("shop_id", shopId)
     .eq("customer_whatsapp", customerWhatsapp)
     .eq("date", serviceDate)
     .eq("is_squeeze_in", true)
@@ -509,7 +522,12 @@ async function syncManualEncaixeItemsToComanda(
         ) + 1
       : 0;
 
-  const pricing = await loadServicePricingContext(admin, serviceDate);
+  const pricing = await loadServicePricingContext(
+    admin,
+    serviceDate,
+    undefined,
+    shopId
+  );
 
   for (const apt of squeezeApts) {
     const { data: services } = await admin
@@ -650,9 +668,13 @@ async function resolveComandaDetail(
   const includeDone = row.status === "closed";
   const [linkedFromJunction, dayEncaixes] = await Promise.all([
     loadLinkedAppointments(admin, row.id, row.service_date),
-    loadCustomerDayEncaixes(admin, row.customer_whatsapp, row.service_date, {
-      includeDone,
-    }),
+    loadCustomerDayEncaixes(
+      admin,
+      row.shop_id,
+      row.customer_whatsapp,
+      row.service_date,
+      { includeDone }
+    ),
   ]);
 
   const linkedById = new Map(
@@ -1171,12 +1193,17 @@ async function syncItemsFromLinkedAppointments(
 ): Promise<void> {
   const { data: comanda } = await admin
     .from("comandas")
-    .select("service_date")
+    .select("service_date, shop_id")
     .eq("id", comandaId)
     .maybeSingle();
   if (!comanda) return;
 
-  const pricing = await loadServicePricingContext(admin, comanda.service_date);
+  const pricing = await loadServicePricingContext(
+    admin,
+    comanda.service_date,
+    undefined,
+    comanda.shop_id
+  );
 
   const { data: links } = await admin
     .from("comanda_appointments")
@@ -1410,9 +1437,15 @@ async function syncItemsFromLinkedAppointments(
 async function refreshLinkedAppointmentItemPrices(
   admin: SupabaseClient,
   comandaId: string,
-  serviceDate: string
+  serviceDate: string,
+  shopId: string
 ): Promise<void> {
-  const pricing = await loadServicePricingContext(admin, serviceDate);
+  const pricing = await loadServicePricingContext(
+    admin,
+    serviceDate,
+    undefined,
+    shopId
+  );
 
   const { data: items } = await admin
     .from("comanda_items")
@@ -1455,12 +1488,14 @@ async function refreshLinkedAppointmentItemPrices(
 
 async function mergeDuplicateOpenComandas(
   admin: SupabaseClient,
+  shopId: string,
   customerWhatsapp: string,
   serviceDate: string
 ): Promise<string | null> {
   const { data: openComandas } = await admin
     .from("comandas")
     .select("id, created_at")
+    .eq("shop_id", shopId)
     .eq("customer_whatsapp", customerWhatsapp)
     .eq("service_date", serviceDate)
     .eq("status", "open")
@@ -1501,6 +1536,7 @@ async function mergeDuplicateOpenComandas(
 
 type AppointmentTriggerRow = {
   id: string;
+  shop_id: string;
   professional_id: string;
   status: string;
   customer_whatsapp: string;
@@ -1516,6 +1552,7 @@ type AppointmentTriggerRow = {
  */
 async function isOpenComandaReadyToShow(
   admin: SupabaseClient,
+  shopId: string,
   comandaId: string,
   dayIds: string[],
   triggerAppointmentId: string,
@@ -1542,6 +1579,7 @@ async function isOpenComandaReadyToShow(
       admin
         .from("appointments")
         .select("id")
+        .eq("shop_id", shopId)
         .eq("customer_whatsapp", customerWhatsapp)
         .eq("date", serviceDate)
         .eq("is_squeeze_in", true)
@@ -1637,6 +1675,7 @@ async function isOpenComandaReadyToShow(
 
 async function syncOpenComandaForCustomerDay(
   admin: SupabaseClient,
+  shopId: string,
   comandaId: string,
   dayIds: string[],
   validDayAppointmentIds: Set<string>,
@@ -1668,12 +1707,18 @@ async function syncOpenComandaForCustomerDay(
     validDayAppointmentIds
   );
 
-  await refreshLinkedAppointmentItemPrices(admin, comandaId, serviceDate);
+  await refreshLinkedAppointmentItemPrices(
+    admin,
+    comandaId,
+    serviceDate,
+    shopId
+  );
 
   await unlinkSqueezeAppointmentsFromComanda(admin, comandaId);
 
   await syncManualEncaixeItemsToComanda(
     admin,
+    shopId,
     comandaId,
     customerWhatsapp,
     serviceDate
@@ -1701,7 +1746,7 @@ export async function getOrCreateComandaForAppointment(
       await admin
         .from("appointments")
         .select(
-          "id, professional_id, status, customer_whatsapp, date, customer_first_name, customer_last_name"
+          "id, shop_id, professional_id, status, customer_whatsapp, date, customer_first_name, customer_last_name"
         )
         .eq("id", appointmentId)
         .maybeSingle()
@@ -1722,6 +1767,7 @@ export async function getOrCreateComandaForAppointment(
   const { data: dayAppointments } = await admin
     .from("appointments")
     .select("id")
+    .eq("shop_id", trigger.shop_id)
     .eq("customer_whatsapp", trigger.customer_whatsapp)
     .eq("date", trigger.date)
     .eq("is_squeeze_in", false)
@@ -1732,6 +1778,7 @@ export async function getOrCreateComandaForAppointment(
 
   let comandaId = await mergeDuplicateOpenComandas(
     admin,
+    trigger.shop_id,
     trigger.customer_whatsapp,
     trigger.date
   );
@@ -1739,6 +1786,7 @@ export async function getOrCreateComandaForAppointment(
   if (!comandaId) {
     comandaId = await findOpenComandaIdForCustomerDay(
       admin,
+      trigger.shop_id,
       trigger.customer_whatsapp,
       trigger.date
     );
@@ -1762,6 +1810,7 @@ export async function getOrCreateComandaForAppointment(
     const { data: created, error } = await admin
       .from("comandas")
       .insert({
+        shop_id: trigger.shop_id,
         appointment_id: appointmentId,
         professional_id: trigger.professional_id,
         customer_whatsapp: trigger.customer_whatsapp,
@@ -1811,6 +1860,7 @@ export async function getOrCreateComandaForAppointment(
     !justCreated &&
     (await isOpenComandaReadyToShow(
       admin,
+      trigger.shop_id,
       resolvedComandaId,
       dayIds,
       appointmentId,
@@ -1823,6 +1873,7 @@ export async function getOrCreateComandaForAppointment(
 
   await syncOpenComandaForCustomerDay(
     admin,
+    trigger.shop_id,
     resolvedComandaId,
     dayIds,
     validDayAppointmentIds,
@@ -1842,7 +1893,7 @@ export async function syncOpenComandaAfterAppointmentEdit(
 ): Promise<void> {
   const { data: trigger } = await admin
     .from("appointments")
-    .select("customer_whatsapp, date, status")
+    .select("shop_id, customer_whatsapp, date, status")
     .eq("id", appointmentId)
     .maybeSingle();
 
@@ -1855,6 +1906,7 @@ export async function syncOpenComandaAfterAppointmentEdit(
 
   const comandaId = await findOpenComandaIdForCustomerDay(
     admin,
+    trigger.shop_id,
     trigger.customer_whatsapp,
     trigger.date
   );
@@ -1863,6 +1915,7 @@ export async function syncOpenComandaAfterAppointmentEdit(
   const { data: dayAppointments } = await admin
     .from("appointments")
     .select("id")
+    .eq("shop_id", trigger.shop_id)
     .eq("customer_whatsapp", trigger.customer_whatsapp)
     .eq("date", trigger.date)
     .eq("is_squeeze_in", false)
@@ -2020,6 +2073,7 @@ export type ComandaLoadOptions = {
 
 export async function createWalkInComanda(
   admin: SupabaseClient,
+  shopId: string,
   serviceDate: string
 ): Promise<
   { ok: true; comanda: ComandaDetail } | { ok: false; error: string; status: number }
@@ -2031,6 +2085,7 @@ export async function createWalkInComanda(
   const { data: created, error } = await admin
     .from("comandas")
     .insert({
+      shop_id: shopId,
       appointment_id: null,
       professional_id: null,
       customer_whatsapp: null,
@@ -2203,6 +2258,7 @@ export async function getComandaById(
     if (data.customer_whatsapp) {
       await syncManualEncaixeItemsToComanda(
         admin,
+        data.shop_id,
         comandaId,
         data.customer_whatsapp,
         data.service_date
@@ -2211,7 +2267,8 @@ export async function getComandaById(
     await refreshLinkedAppointmentItemPrices(
       admin,
       comandaId,
-      data.service_date
+      data.service_date,
+      data.shop_id
     );
     const totals = await recalculateComandaTotals(admin, comandaId);
     await admin
@@ -2266,7 +2323,8 @@ async function loadServiceDurationsForSync(
   admin: SupabaseClient,
   items: Pick<ComandaItemInput, "serviceId" | "professionalId">[],
   fallbackProfessionalId: string,
-  serviceDate: string
+  serviceDate: string,
+  shopId: string
 ): Promise<
   | {
       ok: true;
@@ -2292,6 +2350,7 @@ async function loadServiceDurationsForSync(
   const { data: foundServices } = await admin
     .from("services")
     .select("id, name, duration_minutes, price_cents, active")
+    .eq("shop_id", shopId)
     .in("id", uniqueIds);
 
   if (!foundServices || foundServices.length !== uniqueIds.length) {
@@ -2507,9 +2566,6 @@ async function upsertSqueezeAppointment(
     };
   }
 
-  // Avisos (app / WhatsApp barbeiro) em segundo plano — não atrasam a comanda.
-  scheduleAppointmentCreatedNotify(created.id, "comanda_extra");
-
   return { ok: true, appointmentId: created.id };
 }
 
@@ -2550,7 +2606,8 @@ function resolvePreviousComandaItem(
 
 async function resolveMainForComandaItem(
   admin: SupabaseClient,
-  item: ComandaItemInput
+  item: ComandaItemInput,
+  shopId: string
 ): Promise<MainAppointmentRow | null> {
   if (!item.appointmentId && !item.professionalId) return null;
 
@@ -2562,6 +2619,7 @@ async function resolveMainForComandaItem(
       .from("appointments")
       .select(selectFields)
       .eq("id", item.appointmentId)
+      .eq("shop_id", shopId)
       .eq("is_squeeze_in", false)
       .maybeSingle();
 
@@ -2577,6 +2635,7 @@ async function resolveMainForComandaItem(
         .from("appointments")
         .select(selectFields)
         .eq("professional_id", item.professionalId)
+        .eq("shop_id", shopId)
         .eq("customer_whatsapp", byId.customer_whatsapp)
         .eq("date", byId.date)
         .eq("is_squeeze_in", false)
@@ -2633,7 +2692,8 @@ async function syncComandaItemAgendaMoves(
   comandaId: string,
   items: ComandaItemInput[],
   previousItems: ComandaItem[],
-  durations: Map<string, number>
+  durations: Map<string, number>,
+  shopId: string
 ): Promise<
   | { ok: true; appointmentIdsForItems: (string | null)[] }
   | { ok: false; error: string; status: number }
@@ -2668,7 +2728,7 @@ async function syncComandaItemAgendaMoves(
     }
 
     const oldAptId = previous.appointmentId;
-    const targetMain = await resolveMainForComandaItem(admin, item);
+    const targetMain = await resolveMainForComandaItem(admin, item, shopId);
     if (!targetMain) {
       return {
         ok: false,
@@ -2828,7 +2888,8 @@ async function syncComandaAddonAppointments(
   admin: SupabaseClient,
   items: ComandaItemInput[],
   previousItems: ComandaItem[],
-  durations: Map<string, number>
+  durations: Map<string, number>,
+  shopId: string
 ): Promise<
   | {
       ok: true;
@@ -2865,7 +2926,7 @@ async function syncComandaAddonAppointments(
 
     const isExplicitExtra = Boolean(item.isComandaExtra && item.startTime);
 
-    const main = await resolveMainForComandaItem(admin, item);
+    const main = await resolveMainForComandaItem(admin, item, shopId);
     if (!main || main.status === "cancelled") continue;
 
     const { data: mainLinks } = await admin
@@ -3023,7 +3084,8 @@ type ProductRowForComanda = {
 
 async function loadProductsForComandaItems(
   admin: SupabaseClient,
-  productItems: ComandaItemInput[]
+  productItems: ComandaItemInput[],
+  shopId: string
 ): Promise<
   | { ok: true; products: Map<string, ProductRowForComanda> }
   | { ok: false; error: string; status: number }
@@ -3043,6 +3105,7 @@ async function loadProductsForComandaItems(
   const { data, error } = await admin
     .from("products")
     .select("id, name, price_cents, commission_percent, active")
+    .eq("shop_id", shopId)
     .in("id", ids);
 
   if (error) {
@@ -3094,7 +3157,8 @@ async function listComandaProductQuantities(
 
 async function validateProductStockForClose(
   admin: SupabaseClient,
-  comandaId: string
+  comandaId: string,
+  shopId: string
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const required = await listComandaProductQuantities(admin, comandaId);
   if (required.size === 0) return { ok: true };
@@ -3102,6 +3166,7 @@ async function validateProductStockForClose(
   const { data: products, error } = await admin
     .from("products")
     .select("id, name, stock_quantity")
+    .eq("shop_id", shopId)
     .in("id", [...required.keys()]);
 
   if (error) {
@@ -3135,6 +3200,7 @@ async function validateProductStockForClose(
 
 async function deductProductStockForComanda(
   admin: SupabaseClient,
+  shopId: string,
   comandaId: string,
   createdBy?: string | null
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
@@ -3144,6 +3210,7 @@ async function deductProductStockForComanda(
   for (const [productId, quantity] of required) {
     const result = await applyProductStockDelta(admin, {
       productId,
+      shopId,
       delta: -quantity,
       reason: "sale",
       comandaId,
@@ -3157,6 +3224,7 @@ async function deductProductStockForComanda(
 
 async function restoreProductStockForComanda(
   admin: SupabaseClient,
+  shopId: string,
   comandaId: string,
   createdBy?: string | null
 ): Promise<void> {
@@ -3166,6 +3234,7 @@ async function restoreProductStockForComanda(
   for (const [productId, quantity] of required) {
     await applyProductStockDelta(admin, {
       productId,
+      shopId,
       delta: quantity,
       reason: "sale_reopen",
       comandaId,
@@ -3291,7 +3360,11 @@ export async function updateComandaItems(
 
   const previousItems = current.comanda.items;
 
-  const productsResult = await loadProductsForComandaItems(admin, productItems);
+  const productsResult = await loadProductsForComandaItems(
+    admin,
+    productItems,
+    current.comanda.shopId
+  );
   if (!productsResult.ok) return productsResult;
 
   const previousServiceItems = previousItems.filter(
@@ -3323,7 +3396,8 @@ export async function updateComandaItems(
       admin,
       serviceItems,
       current.comanda.professionalId,
-      current.comanda.serviceDate
+      current.comanda.serviceDate,
+      current.comanda.shopId
     );
     if (!durationsResult.ok) return durationsResult;
 
@@ -3332,7 +3406,8 @@ export async function updateComandaItems(
       comandaId,
       serviceItems,
       previousServiceItems,
-      durationsResult.durations
+      durationsResult.durations,
+      current.comanda.shopId
     );
     if (!moveResult.ok) return moveResult;
     agendaMoveResult = moveResult;
@@ -3348,7 +3423,8 @@ export async function updateComandaItems(
       admin,
       itemsForAgendaSync,
       previousServiceItems,
-      durationsResult.durations
+      durationsResult.durations,
+      current.comanda.shopId
     );
 
     if (!addonResult.ok) {
@@ -3361,7 +3437,8 @@ export async function updateComandaItems(
       admin,
       serviceItems,
       current.comanda.professionalId,
-      current.comanda.serviceDate
+      current.comanda.serviceDate,
+      current.comanda.shopId
     );
     if (!durationsResult.ok) return durationsResult;
   }
@@ -3652,17 +3729,26 @@ export async function closeComanda(
   }
 
   const [stockCheck, cashCheck, balanceOrCustomer] = await Promise.all([
-    validateProductStockForClose(admin, comandaId),
-    assertComandaClosableInOpenCashRegister(admin, comanda.serviceDate),
+    validateProductStockForClose(admin, comandaId, comanda.shopId),
+    assertComandaClosableInOpenCashRegister(
+      admin,
+      comanda.shopId,
+      comanda.serviceDate
+    ),
     needsCustomer
       ? Promise.all([
           storeCreditCents > 0
             ? getCustomerCreditBalanceByWhatsapp(
                 admin,
+                comanda.shopId,
                 comanda.customerWhatsapp
               )
             : Promise.resolve(null as number | null),
-          resolveCustomerIdByWhatsapp(admin, comanda.customerWhatsapp),
+          resolveCustomerIdByWhatsapp(
+            admin,
+            comanda.shopId,
+            comanda.customerWhatsapp
+          ),
         ])
       : Promise.resolve([null, null] as const),
   ]);
@@ -3699,6 +3785,7 @@ export async function closeComanda(
 
   const stockDeduct = await deductProductStockForComanda(
     admin,
+    comanda.shopId,
     comandaId,
     closedByUserId
   );
@@ -3735,7 +3822,12 @@ export async function closeComanda(
   );
 
   if (payError) {
-    await restoreProductStockForComanda(admin, comandaId, closedByUserId);
+    await restoreProductStockForComanda(
+      admin,
+      comanda.shopId,
+      comandaId,
+      closedByUserId
+    );
     if (deductedStoreCredit) {
       await reverseComandaCreditTransactions(admin, comandaId);
     }
@@ -3761,7 +3853,12 @@ export async function closeComanda(
     .eq("id", comandaId);
 
   if (comandaError) {
-    await restoreProductStockForComanda(admin, comandaId, closedByUserId);
+    await restoreProductStockForComanda(
+      admin,
+      comanda.shopId,
+      comandaId,
+      closedByUserId
+    );
     await admin.from("comanda_payments").delete().eq("comanda_id", comandaId);
     if (deductedStoreCredit) {
       await reverseComandaCreditTransactions(admin, comandaId);
@@ -3844,6 +3941,7 @@ export async function closeComanda(
 /** Remove comandas abertas duplicadas do mesmo cliente/dia antes de reabrir. */
 async function absorbConflictingOpenComandas(
   admin: SupabaseClient,
+  shopId: string,
   targetComandaId: string,
   customerWhatsapp: string,
   serviceDate: string
@@ -3851,6 +3949,7 @@ async function absorbConflictingOpenComandas(
   const { data: conflicts } = await admin
     .from("comandas")
     .select("id")
+    .eq("shop_id", shopId)
     .eq("customer_whatsapp", customerWhatsapp)
     .eq("service_date", serviceDate)
     .eq("status", "open")
@@ -3942,6 +4041,7 @@ export async function reopenComanda(
 
   await absorbConflictingOpenComandas(
     admin,
+    comanda.shopId,
     comandaId,
     comanda.customerWhatsapp,
     comanda.serviceDate
@@ -3972,6 +4072,7 @@ export async function reopenComanda(
 
   const customerId = await resolveCustomerIdByWhatsapp(
     admin,
+    comanda.shopId,
     comanda.customerWhatsapp
   );
 
@@ -3983,7 +4084,7 @@ export async function reopenComanda(
     return { ok: false, error: creditReverse.error, status: 400 };
   }
 
-  await restoreProductStockForComanda(admin, comandaId, null);
+  await restoreProductStockForComanda(admin, comanda.shopId, comandaId, null);
 
   await admin.from("comanda_payments").delete().eq("comanda_id", comandaId);
 
