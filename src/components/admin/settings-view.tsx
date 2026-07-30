@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ShopProfileForm,
@@ -43,6 +44,15 @@ const SETTINGS_TABS = [
   "recepcao",
 ] as const;
 
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+function resolveTab(value: string | null | undefined): SettingsTab {
+  if (value && SETTINGS_TABS.includes(value as SettingsTab)) {
+    return value as SettingsTab;
+  }
+  return "perfil";
+}
+
 export function SettingsView({
   profile,
   slug,
@@ -55,27 +65,42 @@ export function SettingsView({
   receptionStaff,
   defaultTab = "perfil",
 }: SettingsViewProps) {
-  const initialTab = SETTINGS_TABS.includes(
-    defaultTab as (typeof SETTINGS_TABS)[number]
-  )
-    ? defaultTab
-    : "perfil";
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = resolveTab(searchParams.get("tab") ?? defaultTab);
+
+  function handleTabChange(next: string) {
+    const resolved = resolveTab(next);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", resolved);
+    router.replace(`/admin/configuracoes?${params.toString()}`, {
+      scroll: false,
+    });
+  }
 
   return (
     <Tabs
-      key={initialTab}
-      defaultValue={initialTab}
+      value={tab}
+      onValueChange={handleTabChange}
       className="flex w-full flex-col gap-4"
     >
       <div className="-mx-1 overflow-x-auto px-1 pb-0.5">
         <TabsList className="h-auto w-max min-w-full flex-nowrap justify-start gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
-          <TabsTrigger value="perfil" className="flex-none px-3">
+          <TabsTrigger
+            value="perfil"
+            className="flex-none px-3"
+            data-tour="tour-tab-perfil"
+          >
             Perfil
           </TabsTrigger>
           <TabsTrigger value="link" className="flex-none px-3">
             Link
           </TabsTrigger>
-          <TabsTrigger value="horarios" className="flex-none px-3">
+          <TabsTrigger
+            value="horarios"
+            className="flex-none px-3"
+            data-tour="tour-tab-horarios"
+          >
             Horários
           </TabsTrigger>
           <TabsTrigger value="excecoes" className="flex-none px-3">
@@ -95,8 +120,11 @@ export function SettingsView({
         </TabsList>
       </div>
 
-      <TabsContent value="perfil" className="mt-0">
-        <div data-tour="tour-settings-profile">
+      <TabsContent value="perfil" className="mt-0" forceMount>
+        <div
+          data-tour="tour-settings-profile"
+          className={cn(tab !== "perfil" && "hidden")}
+        >
           <ShopProfileForm initialValues={profile} />
         </div>
       </TabsContent>
@@ -105,8 +133,11 @@ export function SettingsView({
         <BookingLinkForm initialSlug={slug} />
       </TabsContent>
 
-      <TabsContent value="horarios" className="mt-0">
-        <div data-tour="tour-settings-hours">
+      <TabsContent value="horarios" className="mt-0" forceMount>
+        <div
+          data-tour="tour-settings-hours"
+          className={cn(tab !== "horarios" && "hidden")}
+        >
           <BusinessHoursForm
             initialDays={businessDays}
             initialSlotStep={slotStepMinutes}

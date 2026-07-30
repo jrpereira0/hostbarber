@@ -3,14 +3,14 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRight, Check, ListChecks, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,6 @@ type OnboardingTourProps = {
   shopId: string;
   shopName: string;
   status: OnboardingStatus;
-  /** Se true, abre o modal de boas-vindas imediatamente. */
   forceWelcome?: boolean;
 };
 
@@ -74,6 +73,14 @@ function stepIndex(id: OnboardingStepId): number {
   return TOUR_STEPS.findIndex((s) => s.id === id);
 }
 
+function isStepDataDone(id: TourStepDef["id"], status: OnboardingStatus) {
+  if (id === "profile" || id === "hours") return status.shopDone;
+  if (id === "team") return status.teamDone;
+  if (id === "services") return status.servicesDone;
+  if (id === "products") return status.productsDone;
+  return false;
+}
+
 export function OnboardingTour({
   shopId,
   shopName,
@@ -82,11 +89,13 @@ export function OnboardingTour({
 }: OnboardingTourProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [activeId, setActiveId] = useState<OnboardingStepId | null>(null);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
   const [pending, startTransition] = useTransition();
+  const didScrollRef = useRef<string | null>(null);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -111,56 +120,81 @@ export function OnboardingTour({
   const progressIndex = activeId ? Math.max(0, stepIndex(activeId)) : 0;
   const progressTotal = TOUR_STEPS.length;
 
-  const measureTarget = useCallback(() => {
-    if (!activeStep) {
-      setTargetRect(null);
-      return;
-    }
-    const el = document.querySelector<HTMLElement>(
-      `[data-tour="${activeStep.target}"]`
-    );
-    if (!el) {
-      setTargetRect(null);
-      return;
-    }
-    const r = el.getBoundingClientRect();
-    const pad = 8;
-    setTargetRect({
-      top: r.top - pad,
-      left: r.left - pad,
-      width: r.width + pad * 2,
-      height: r.height + pad * 2,
-    });
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeStep]);
+  const measureTarget = useCallback(
+    (allowScroll: boolean) => {
+      if (!activeStep) {
+        setTargetRect(null);
+        return;
+      }
+      const el = document.querySelector<HTMLElement>(
+        `[data-tour="${activeStep.target}"]`
+      );
+      if (!el) {
+        setTargetRect(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) {
+        setTargetRect(null);
+        return;
+      }
 
-  useLayoutEffect(() => {
-    if (!activeStep) return;
-    const frame = requestAnimationFrame(() => measureTarget());
-    const onResize = () => measureTarget();
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onResize, true);
-    const timer = window.setInterval(() => measureTarget(), 500);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onResize, true);
-      window.clearInterval(timer);
-    };
-  }, [activeStep, pathname, measureTarget]);
+      const pad = 10;
+      const maxH = Math.min(r.height + pad * 2, window.innerHeight * 0.42);
+      setTargetRect({
+        top: Math.max(8, r.top - pad),
+        left: Math.max(8, r.left - pad),
+        width: Math.min(r.width + pad * 2, window.innerWidth - 16),
+        height: maxH,
+      });
 
-  // Se o passo aponta para outra rota, navega.
+      if (allowScroll && didScrollRef.current !== activeStep.id) {
+        didScrollRef.current = activeStep.id;
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    },
+    [activeStep]
+  );
+
   useEffect(() => {
     if (!activeStep) return;
-    const targetPath = activeStep.href.split("?")[0];
+    didScrollRef.current = null;
+    const frame = requestAnimationFrame(() => measureTarget(true));
+    const timer = window.setInterval(() => measureTarget(false), 300);
+    const onResize = () => measureTarget(false);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearInterval(timer);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+    };
+  }, [activeStep, pathname, searchParams, measureTarget]);
+
+  useEffect(() => {
+    if (!activeStep) return;
+    const [targetPath, query = ""] = activeStep.href.split("?");
     if (pathname !== targetPath) {
       router.push(activeStep.href);
+      return;
     }
-  }, [activeStep, pathname, router]);
+    if (query) {
+      const wanted = new URLSearchParams(query);
+      let mismatch = false;
+      wanted.forEach((value, key) => {
+        if (searchParams.get(key) !== value) mismatch = true;
+      });
+      if (mismatch) {
+        router.replace(activeStep.href, { scroll: false });
+      }
+    }
+  }, [activeStep, pathname, searchParams, router]);
 
   function goToStep(id: OnboardingStepId) {
     writeStoredStep(shopId, id);
     setActiveId(id === "welcome" ? null : id);
+    setTargetRect(null);
     if (id === "welcome") {
       setWelcomeOpen(true);
       return;
@@ -171,18 +205,7 @@ export function OnboardingTour({
   }
 
   function startTour() {
-    const start =
-      status.suggestedStepId === "done" || status.suggestedStepId === "welcome"
-        ? "profile"
-        : status.suggestedStepId === "hours" ||
-            status.suggestedStepId === "profile" ||
-            status.suggestedStepId === "team" ||
-            status.suggestedStepId === "services" ||
-            status.suggestedStepId === "products" ||
-            status.suggestedStepId === "cash"
-          ? status.suggestedStepId
-          : "profile";
-    goToStep(start);
+    goToStep("profile");
   }
 
   function nextStep() {
@@ -242,6 +265,7 @@ export function OnboardingTour({
             stepNumber={progressIndex + 1}
             stepTotal={progressTotal}
             pending={pending}
+            waiting={!targetRect}
             onNext={nextStep}
             onPrev={prevStep}
             onSkip={() => finishTour("skip")}
@@ -323,7 +347,6 @@ export function OnboardingTour({
 
       {balloon}
 
-      {/* Atalho flutuante para retomar o guia */}
       {!welcomeOpen && !activeStep ? (
         <button
           type="button"
@@ -338,20 +361,13 @@ export function OnboardingTour({
   );
 }
 
-function isStepDataDone(id: TourStepDef["id"], status: OnboardingStatus) {
-  if (id === "profile" || id === "hours") return status.shopDone;
-  if (id === "team") return status.teamDone;
-  if (id === "services") return status.servicesDone;
-  if (id === "products") return status.productsDone;
-  return false;
-}
-
 function TourOverlay({
   rect,
   step,
   stepNumber,
   stepTotal,
   pending,
+  waiting,
   onNext,
   onPrev,
   onSkip,
@@ -362,66 +378,102 @@ function TourOverlay({
   stepNumber: number;
   stepTotal: number;
   pending: boolean;
+  waiting: boolean;
   onNext: () => void;
   onPrev: () => void;
   onSkip: () => void;
   onClose: () => void;
 }) {
   const balloonStyle = useMemo(() => {
-    if (!rect) {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
       return {
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        } as CSSProperties;
+        left: 16,
+        right: 16,
+        bottom: 16,
+        width: "auto",
+        maxWidth: "none",
+      } as CSSProperties;
     }
 
-    const gap = 12;
-    const balloonApprox = 280;
+    if (!rect) {
+      return {
+        top: "auto",
+        bottom: 24,
+        left: "50%",
+        transform: "translateX(-50%)",
+        maxWidth: 360,
+      } as CSSProperties;
+    }
+
+    const gap = 14;
     const spaceBelow = window.innerHeight - (rect.top + rect.height);
-    const placeBelow = spaceBelow > balloonApprox || rect.top < balloonApprox;
+    const placeBelow = spaceBelow > 260;
 
     const left = Math.min(
       Math.max(16, rect.left),
-      window.innerWidth - 16 - Math.min(340, window.innerWidth - 32)
+      window.innerWidth - 16 - 360
     );
 
     if (placeBelow) {
       return {
         top: rect.top + rect.height + gap,
-        left,
-        maxWidth: Math.min(340, window.innerWidth - 32),
+        left: Math.max(16, left),
+        maxWidth: 360,
       } as CSSProperties;
     }
 
     return {
-      top: Math.max(16, rect.top - gap - 220),
-      left,
-      maxWidth: Math.min(340, window.innerWidth - 32),
+      top: Math.max(16, rect.top - gap - 200),
+      left: Math.max(16, left),
+      maxWidth: 360,
     } as CSSProperties;
   }, [rect]);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[80]">
-      {/* Escurece a tela */}
-      <div className="absolute inset-0 bg-black/70" />
-
-      {/* Recorte do alvo */}
+    <div className="fixed inset-0 z-[80]">
       {rect ? (
-        <div
-          className="absolute rounded-xl border-2 border-[#ecf15e] bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.72)]"
-          style={{
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-          }}
-        />
-      ) : null}
+        <>
+          <div
+            className="pointer-events-none absolute left-0 right-0 top-0 bg-black/55"
+            style={{ height: Math.max(0, rect.top) }}
+          />
+          <div
+            className="pointer-events-none absolute left-0 bg-black/55"
+            style={{
+              top: rect.top,
+              width: Math.max(0, rect.left),
+              height: rect.height,
+            }}
+          />
+          <div
+            className="pointer-events-none absolute bg-black/55"
+            style={{
+              top: rect.top,
+              left: rect.left + rect.width,
+              right: 0,
+              height: rect.height,
+            }}
+          />
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/55"
+            style={{ top: rect.top + rect.height }}
+          />
+          <div
+            className="pointer-events-none absolute rounded-xl border-2 border-[#ecf15e] shadow-[0_0_0_4px_rgba(236,241,94,0.2)]"
+            style={{
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+            }}
+          />
+        </>
+      ) : (
+        <div className="pointer-events-none absolute inset-0 bg-black/40" />
+      )}
 
-      {/* Balão */}
       <div
-        className="pointer-events-auto absolute z-[81] w-[min(340px,calc(100vw-2rem))] rounded-2xl border border-white/15 bg-[#151618] p-4 text-[#f5f5f5] shadow-2xl"
+        className="absolute z-[81] rounded-2xl border border-white/15 bg-[#151618] p-4 text-[#f5f5f5] shadow-2xl"
         style={balloonStyle}
       >
         <div className="mb-3 flex items-start justify-between gap-2">
@@ -444,7 +496,9 @@ function TourOverlay({
         </div>
 
         <p className={cn("text-sm leading-relaxed", ADMIN_SURFACE.muted)}>
-          {step.body}
+          {waiting
+            ? "Carregando a tela… em instantes você consegue editar aqui."
+            : step.body}
         </p>
 
         <div className="mt-4 flex flex-col gap-2">

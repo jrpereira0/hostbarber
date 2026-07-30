@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireServerClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/admin/page-header";
 import { SettingsView } from "@/components/admin/settings-view";
@@ -92,40 +93,42 @@ export default async function SettingsPage({ searchParams }: PageProps) {
           description="Perfil, horários, dias especiais, recepção, mensagens e integrações da barbearia."
         />
 
-        <SettingsView
-          defaultTab={tab}
-          slug={settings?.slug ?? ""}
-          profile={{
-            shopName: settings?.name ?? "",
-            bio: settings?.bio ?? "",
-            cep: settings?.cep ? formatCep(settings.cep) : "",
-            street: settings?.street ?? "",
-            addressNumber: settings?.address_number ?? "",
-            addressComplement: settings?.address_complement ?? "",
-            neighborhood: settings?.neighborhood ?? "",
-            city: settings?.city ?? "",
-            state: settings?.state ?? "",
-            whatsapp: settings?.whatsapp ?? "",
-            instagram: settings?.instagram ?? "",
-            logoUrl: settings?.logo_url ?? null,
-          }}
-          businessDays={businessDays}
-          slotStepMinutes={settings?.slot_step_minutes ?? 15}
-          exceptions={exceptionItems}
-          professionals={(professionals ?? []).map((p) => ({
-            id: p.id,
-            nickname: p.nickname,
-          }))}
-          confirmationWhatsappMessage={
-            settings?.confirmation_whatsapp_message?.trim()
-              ? settings.confirmation_whatsapp_message
-              : DEFAULT_CONFIRMATION_WHATSAPP_MESSAGE
-          }
-          confirmationWhatsappEnabled={
-            settings?.confirmation_whatsapp_enabled ?? true
-          }
-          receptionStaff={receptionStaff}
-        />
+        <Suspense fallback={null}>
+          <SettingsView
+            defaultTab={tab}
+            slug={settings?.slug ?? ""}
+            profile={{
+              shopName: settings?.name ?? "",
+              bio: settings?.bio ?? "",
+              cep: settings?.cep ? formatCep(settings.cep) : "",
+              street: settings?.street ?? "",
+              addressNumber: settings?.address_number ?? "",
+              addressComplement: settings?.address_complement ?? "",
+              neighborhood: settings?.neighborhood ?? "",
+              city: settings?.city ?? "",
+              state: settings?.state ?? "",
+              whatsapp: settings?.whatsapp ?? "",
+              instagram: settings?.instagram ?? "",
+              logoUrl: settings?.logo_url ?? null,
+            }}
+            businessDays={businessDays}
+            slotStepMinutes={settings?.slot_step_minutes ?? 15}
+            exceptions={exceptionItems}
+            professionals={(professionals ?? []).map((p) => ({
+              id: p.id,
+              nickname: p.nickname,
+            }))}
+            confirmationWhatsappMessage={
+              settings?.confirmation_whatsapp_message?.trim()
+                ? settings.confirmation_whatsapp_message
+                : DEFAULT_CONFIRMATION_WHATSAPP_MESSAGE
+            }
+            confirmationWhatsappEnabled={
+              settings?.confirmation_whatsapp_enabled ?? true
+            }
+            receptionStaff={receptionStaff}
+          />
+        </Suspense>
       </div>
     </div>
   );
