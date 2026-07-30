@@ -14,11 +14,17 @@ import { redirect } from "next/navigation";
 
 export const metadata = { title: "Configurações" };
 
-export default async function SettingsPage() {
+type PageProps = {
+  searchParams: Promise<{ tab?: string }>;
+};
+
+export default async function SettingsPage({ searchParams }: PageProps) {
   await assertOwnerSettingsPage();
 
   const session = await getAdminSession();
   if (!session?.isOwner) redirect("/admin");
+
+  const { tab } = await searchParams;
 
   const supabase = await requireServerClient();
   const today = new Date().toISOString().slice(0, 10);
@@ -87,6 +93,7 @@ export default async function SettingsPage() {
         />
 
         <SettingsView
+          defaultTab={tab}
           slug={settings?.slug ?? ""}
           profile={{
             shopName: settings?.name ?? "",

@@ -165,6 +165,7 @@ export function ProductForm({
       onSubmit={handleSubmit}
       className="flex w-full flex-col gap-4"
       autoComplete="off"
+      data-tour="tour-product-form"
     >
       <FormPanel>
         <FormSectionTitle

@@ -9,6 +9,7 @@ import { ProductForm } from "@/components/admin/product-form";
 import { Button } from "@/components/ui/button";
 import { ADMIN_SURFACE } from "@/lib/admin-surface";
 import { cn } from "@/lib/utils";
+import { ensureDefaultProductCategory } from "@/app/admin/(panel)/primeiros-passos/actions";
 import { createProduct } from "../actions";
 
 export const metadata = { title: "Novo produto" };
@@ -17,6 +18,8 @@ export default async function NewProductPage() {
   const session = await getAdminSession();
   if (!session) redirect(LOGIN_PATH);
   if (!session.isOwner) redirect("/admin");
+
+  await ensureDefaultProductCategory();
 
   const supabase = await requireServerClient();
   const { data: categories } = await supabase

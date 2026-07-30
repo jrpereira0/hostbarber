@@ -205,6 +205,7 @@ export function AgendaCashRegisterSheet({
       {!open && (
         <button
           type="button"
+          data-tour="tour-agenda-cash"
           onClick={() => setOpen(true)}
           className={cn(
             "fixed right-0 top-[42%] z-40 flex -translate-y-1/2 flex-col items-center gap-2",

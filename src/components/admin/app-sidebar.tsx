@@ -210,13 +210,13 @@ export function AppSidebar({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     asChild
-                    isActive={isNavActive(pathname, "/admin/primeiros-passos")}
-                    tooltip="Primeiros passos"
+                    isActive={false}
+                    tooltip="Guia inicial"
                     onClick={() => setOpenMobile(false)}
                   >
-                    <Link href="/admin/primeiros-passos">
+                    <Link href="/admin?guia=1">
                       <ListChecks />
-                      <span>Primeiros passos</span>
+                      <span>Guia inicial</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

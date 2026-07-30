@@ -242,6 +242,7 @@ export function ProfessionalForm({
       onSubmit={handleSubmit}
       className="flex w-full flex-col gap-4"
       autoComplete="off"
+      data-tour="tour-professional-form"
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="-mx-1 overflow-x-auto px-1 pb-0.5">

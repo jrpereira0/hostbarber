@@ -29,10 +29,6 @@ import type { CashRegisterResponsibleOption } from "@/components/admin/open-cash
 import type { CashRegisterSession } from "@/lib/cash-register-service";
 import type { CashRegisterSummary } from "@/lib/finance-reports";
 import { DEFAULT_CONFIRMATION_WHATSAPP_MESSAGE } from "@/lib/confirmation-message";
-import {
-  getOnboardingStatus,
-  ONBOARDING_PATH,
-} from "@/lib/onboarding";
 
 type PageProps = {
   searchParams: Promise<{ date?: string }>;
@@ -48,13 +44,6 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : today;
 
   const supabase = await requireServerClient();
-
-  if (session.isOwner) {
-    const onboarding = await getOnboardingStatus(supabase, session.shopId);
-    if (!onboarding.completed) {
-      redirect(ONBOARDING_PATH);
-    }
-  }
 
   const { data: allProfessionals } = await supabase
     .from("professionals")

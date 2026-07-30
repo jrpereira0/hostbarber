@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { requireServerClient } from "@/lib/supabase/server";
 import { LOGIN_PATH, loginUrl } from "@/lib/login-path";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -8,7 +9,9 @@ import { AdminMobileMenu } from "@/components/admin/admin-mobile-menu";
 import { AdminSidebarToggle } from "@/components/admin/admin-sidebar-toggle";
 import { AdminPanelContent } from "@/components/admin/admin-panel-content";
 import { AdminPanelInset } from "@/components/admin/admin-panel-inset";
+import { AdminOnboardingHost } from "@/components/admin/admin-onboarding-host";
 import { bookingPathForSlug } from "@/lib/booking-path";
+import { getOnboardingStatus } from "@/lib/onboarding";
 
 // Painel exige sessão e banco: não pré-renderiza no build da Vercel.
 export const dynamic = "force-dynamic";
@@ -63,7 +66,7 @@ export default async function AdminLayout({
 
   const { data: shop } = await supabase
     .from("shops")
-    .select("slug, active")
+    .select("slug, active, name, onboarding_completed_at")
     .eq("id", profile.shop_id)
     .maybeSingle();
 
@@ -76,7 +79,12 @@ export default async function AdminLayout({
     ? bookingPathForSlug(shop.slug)
     : "/agenda";
 
-  const showOnboarding = role === "owner";
+  const showOnboarding = role === "owner" && !shop.onboarding_completed_at;
+
+  const onboardingStatus =
+    role === "owner"
+      ? await getOnboardingStatus(supabase, profile.shop_id)
+      : null;
 
   return (
     <TooltipProvider>
@@ -86,12 +94,21 @@ export default async function AdminLayout({
           userName={profile?.full_name || "Usuário"}
           userEmail={user.email ?? ""}
           bookingHref={bookingHref}
-          showOnboarding={showOnboarding}
+          showOnboarding={Boolean(showOnboarding)}
         />
         <AdminPanelInset>
           <AdminSidebarToggle />
           <AdminMobileMenu />
           <AdminPanelContent>{children}</AdminPanelContent>
+          {onboardingStatus && !onboardingStatus.completed ? (
+            <Suspense fallback={null}>
+              <AdminOnboardingHost
+                shopId={profile.shop_id}
+                shopName={shop.name?.trim() || "sua barbearia"}
+                status={onboardingStatus}
+              />
+            </Suspense>
+          ) : null}
         </AdminPanelInset>
       </SidebarProvider>
     </TooltipProvider>

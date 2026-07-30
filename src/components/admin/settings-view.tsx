@@ -30,7 +30,18 @@ type SettingsViewProps = {
   confirmationWhatsappMessage: string;
   confirmationWhatsappEnabled: boolean;
   receptionStaff: ReceptionStaffItem[];
+  /** Aba inicial (ex.: guia de onboarding). */
+  defaultTab?: string;
 };
+
+const SETTINGS_TABS = [
+  "perfil",
+  "link",
+  "horarios",
+  "excecoes",
+  "mensagens",
+  "recepcao",
+] as const;
 
 export function SettingsView({
   profile,
@@ -42,9 +53,20 @@ export function SettingsView({
   confirmationWhatsappMessage,
   confirmationWhatsappEnabled,
   receptionStaff,
+  defaultTab = "perfil",
 }: SettingsViewProps) {
+  const initialTab = SETTINGS_TABS.includes(
+    defaultTab as (typeof SETTINGS_TABS)[number]
+  )
+    ? defaultTab
+    : "perfil";
+
   return (
-    <Tabs defaultValue="perfil" className="flex w-full flex-col gap-4">
+    <Tabs
+      key={initialTab}
+      defaultValue={initialTab}
+      className="flex w-full flex-col gap-4"
+    >
       <div className="-mx-1 overflow-x-auto px-1 pb-0.5">
         <TabsList className="h-auto w-max min-w-full flex-nowrap justify-start gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
           <TabsTrigger value="perfil" className="flex-none px-3">
@@ -74,7 +96,9 @@ export function SettingsView({
       </div>
 
       <TabsContent value="perfil" className="mt-0">
-        <ShopProfileForm initialValues={profile} />
+        <div data-tour="tour-settings-profile">
+          <ShopProfileForm initialValues={profile} />
+        </div>
       </TabsContent>
 
       <TabsContent value="link" className="mt-0">
@@ -82,10 +106,12 @@ export function SettingsView({
       </TabsContent>
 
       <TabsContent value="horarios" className="mt-0">
-        <BusinessHoursForm
-          initialDays={businessDays}
-          initialSlotStep={slotStepMinutes}
-        />
+        <div data-tour="tour-settings-hours">
+          <BusinessHoursForm
+            initialDays={businessDays}
+            initialSlotStep={slotStepMinutes}
+          />
+        </div>
       </TabsContent>
 
       <TabsContent value="excecoes" className="mt-0">

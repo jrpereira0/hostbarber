@@ -5,14 +5,13 @@ import { requireServerClient } from "@/lib/supabase/server";
 import { requireAdminClient } from "@/lib/supabase/admin";
 import { isActionResult } from "@/lib/is-action-result";
 import { getAdminSession } from "@/lib/require-admin";
-import { ONBOARDING_PATH } from "@/lib/onboarding";
 import type { ActionResult } from "@/lib/require-owner";
 
-/** Marca o onboarding como concluído (depois da explicação do caixa). */
+/** Marca o onboarding/guia como concluído. */
 export async function completeOnboarding(): Promise<ActionResult> {
   const session = await getAdminSession();
   if (!session?.isOwner) {
-    return { ok: false, error: "Só o dono pode concluir o onboarding." };
+    return { ok: false, error: "Só o dono pode concluir o guia." };
   }
 
   const supabase = await requireServerClient();
@@ -25,17 +24,16 @@ export async function completeOnboarding(): Promise<ActionResult> {
     return { ok: false, error: "Não foi possível salvar. Tente de novo." };
   }
 
-  revalidatePath(ONBOARDING_PATH);
   revalidatePath("/admin");
+  revalidatePath("/admin", "layout");
   return { ok: true };
 }
 
-/** Pula o restante e libera a agenda (ex.: loja que já opera). */
 export async function skipOnboarding(): Promise<ActionResult> {
   return completeOnboarding();
 }
 
-/** Garante uma categoria padrão para o passo de produtos. */
+/** Garante categoria padrão para o passo de produtos do guia. */
 export async function ensureDefaultProductCategory(): Promise<
   ActionResult & { categoryId?: string }
 > {
@@ -78,7 +76,6 @@ export async function ensureDefaultProductCategory(): Promise<
     };
   }
 
-  revalidatePath(ONBOARDING_PATH);
   revalidatePath("/admin/produtos");
   return { ok: true, categoryId: created.id };
 }

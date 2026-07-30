@@ -4,37 +4,84 @@ import { digitsOnlyWhatsapp } from "@/lib/whatsapp";
 export const ONBOARDING_PATH = "/admin/primeiros-passos";
 
 export type OnboardingStepId =
-  | "shop"
+  | "welcome"
+  | "profile"
+  | "hours"
   | "team"
   | "services"
   | "products"
-  | "cash";
+  | "cash"
+  | "done";
 
-export type OnboardingStepStatus = {
-  id: OnboardingStepId;
-  done: boolean;
-  /** Produtos podem ser pulados sem bloquear o restante. */
+export type TourStepDef = {
+  id: Exclude<OnboardingStepId, "welcome" | "done">;
+  /** Rota real do painel. */
+  href: string;
+  /** data-tour do alvo. */
+  target: string;
+  title: string;
+  body: string;
+  /** Passo opcional (produtos). */
   optional?: boolean;
 };
+
+/** Ordem do guia nas telas reais. */
+export const TOUR_STEPS: TourStepDef[] = [
+  {
+    id: "profile",
+    href: "/admin/configuracoes?tab=perfil",
+    target: "tour-settings-profile",
+    title: "Perfil da barbearia",
+    body: "Preencha nome, WhatsApp e endereço. Depois salve e toque em Próximo.",
+  },
+  {
+    id: "hours",
+    href: "/admin/configuracoes?tab=horarios",
+    target: "tour-settings-hours",
+    title: "Horários de funcionamento",
+    body: "Confira os dias abertos e o intervalo dos slots. Salve e siga em frente.",
+  },
+  {
+    id: "team",
+    href: "/admin/profissionais/novo",
+    target: "tour-professional-form",
+    title: "Cadastre um profissional",
+    body: "Pode ser você. Defina acesso, comissão e horários. Salve para continuar.",
+  },
+  {
+    id: "services",
+    href: "/admin/servicos/novo",
+    target: "tour-service-form",
+    title: "Cadastre um serviço",
+    body: "Corte, barba ou combo — com preço e duração. Sem isso o cliente não agenda.",
+  },
+  {
+    id: "products",
+    href: "/admin/produtos/novo",
+    target: "tour-product-form",
+    title: "Cadastre um produto",
+    body: "Opcional. Pomadas, bebidas… Se não vende agora, pule esta etapa.",
+    optional: true,
+  },
+  {
+    id: "cash",
+    href: "/admin",
+    target: "tour-agenda-cash",
+    title: "Caixa do dia",
+    body: "Aqui você abre o caixa, acompanha as entradas e encerra no fim do dia. Sem caixa aberto, a comanda não fecha.",
+  },
+];
 
 export type OnboardingStatus = {
   completed: boolean;
   completedAt: string | null;
-  steps: OnboardingStepStatus[];
-  /** Quantos passos obrigatórios estão prontos (sem contar caixa). */
-  requiredDone: number;
-  requiredTotal: number;
-  /** Falta concluir o onboarding — manter o dono no fluxo guiado. */
-  needsGuidedSetup: boolean;
-  /** Próximo passo ainda incompleto (ou caixa se o resto estiver ok). */
-  nextStepId: OnboardingStepId;
+  shopDone: boolean;
+  teamDone: boolean;
+  servicesDone: boolean;
+  productsDone: boolean;
+  /** Próximo passo sugerido com base nos dados. */
+  suggestedStepId: OnboardingStepId;
 };
-
-const REQUIRED_BEFORE_CASH: OnboardingStepId[] = [
-  "shop",
-  "team",
-  "services",
-];
 
 function shopProfileDone(shop: {
   name: string | null;
@@ -109,34 +156,35 @@ export async function getOnboardingStatus(
   const servicesDone = (serviceCount ?? 0) >= 1;
   const productsDone = (productCount ?? 0) >= 1;
 
-  const steps: OnboardingStepStatus[] = [
-    { id: "shop", done: shopDone },
-    { id: "team", done: teamDone },
-    { id: "services", done: servicesDone },
-    { id: "products", done: productsDone, optional: true },
-    { id: "cash", done: completed },
-  ];
+  let suggestedStepId: OnboardingStepId = "cash";
+  if (!shopDone) {
+    const profileOk = shopProfileDone({
+      name: shop?.name ?? null,
+      whatsapp: shop?.whatsapp ?? null,
+      phone: shop?.phone ?? null,
+      city: shop?.city ?? null,
+      street: shop?.street ?? null,
+      address: shop?.address ?? null,
+    });
+    suggestedStepId = profileOk ? "hours" : "profile";
+  } else if (!teamDone) suggestedStepId = "team";
+  else if (!servicesDone) suggestedStepId = "services";
+  else if (!productsDone) suggestedStepId = "products";
+  else suggestedStepId = "cash";
 
-  const requiredDone = REQUIRED_BEFORE_CASH.filter((id) =>
-    steps.find((s) => s.id === id)?.done
-  ).length;
-
-  const needsGuidedSetup = !completed;
-
-  let nextStepId: OnboardingStepId = "cash";
-  if (!shopDone) nextStepId = "shop";
-  else if (!teamDone) nextStepId = "team";
-  else if (!servicesDone) nextStepId = "services";
-  else if (!productsDone && !completed) nextStepId = "products";
-  else nextStepId = "cash";
+  if (completed) suggestedStepId = "done";
 
   return {
     completed,
     completedAt,
-    steps,
-    requiredDone,
-    requiredTotal: REQUIRED_BEFORE_CASH.length,
-    needsGuidedSetup,
-    nextStepId,
+    shopDone,
+    teamDone,
+    servicesDone,
+    productsDone,
+    suggestedStepId,
   };
+}
+
+export function tourStorageKey(shopId: string) {
+  return `hostbarber-onboarding-tour:${shopId}`;
 }
