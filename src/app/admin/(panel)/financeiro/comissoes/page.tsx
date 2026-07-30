@@ -107,15 +107,17 @@ export default async function ComissoesPage({ searchParams }: PageProps) {
     Object.fromEntries(payoutEntries);
 
   return (
-    <CommissionsView
-      from={from}
-      to={to}
-      today={today}
-      professionalId={initialProfessionalId}
-      report={report}
-      professionals={professionals}
-      payoutsByProfessionalId={payoutsByProfessionalId}
-      isOwner={session.isOwner}
-    />
+    <div data-tour="tour-commissions-page">
+      <CommissionsView
+        from={from}
+        to={to}
+        today={today}
+        professionalId={initialProfessionalId}
+        report={report}
+        professionals={professionals}
+        payoutsByProfessionalId={payoutsByProfessionalId}
+        isOwner={session.isOwner}
+      />
+    </div>
   );
 }

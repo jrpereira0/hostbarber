@@ -31,7 +31,7 @@ npm run create-platform-admin -- seu@email.com senha123 "Seu Nome"
 
 Acesse [http://localhost:3000/plataforma/login](http://localhost:3000/plataforma/login), cadastre um cliente (loja) e use o e-mail/senha do dono em `/login-admin`.
 
-No primeiro acesso, o dono vê um **guia interativo** (modal + balões nas telas reais): configurações, profissionais, serviços, produtos e caixa. Não há página separada de cadastro — o guia aponta o que preencher em cada tela.
+No primeiro acesso, o dono vê um **tour completo** do painel (modal + balões): todas as abas de Configurações, profissionais, serviços, produtos, clientes, agenda, caixa e financeiro.
 
 O site público da loja fica em `/agenda/{slug}` (ex.: `/agenda/minha-barbearia`). A rota `/agenda` redireciona para a loja padrão (primeira ativa).
 

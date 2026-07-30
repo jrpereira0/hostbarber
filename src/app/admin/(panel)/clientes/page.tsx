@@ -94,7 +94,10 @@ export default async function CustomersPage() {
         ADMIN_SURFACE.page
       )}
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      <div
+        data-tour="tour-clients-page"
+        className="mx-auto flex w-full max-w-6xl flex-col gap-4"
+      >
         <PageHeader
           tone="dark"
           title="Clientes"

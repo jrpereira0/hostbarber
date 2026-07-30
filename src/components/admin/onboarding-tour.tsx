@@ -25,10 +25,13 @@ import {
 import { ADMIN_SURFACE } from "@/lib/admin-surface";
 import { cn } from "@/lib/utils";
 import {
+  TOUR_PHASES,
   TOUR_STEPS,
+  isTourStepDone,
   tourStorageKey,
   type OnboardingStatus,
   type OnboardingStepId,
+  type TourPhaseId,
   type TourStepDef,
 } from "@/lib/onboarding";
 import {
@@ -49,7 +52,7 @@ function readStoredStep(shopId: string): OnboardingStepId | null {
   try {
     const raw = localStorage.getItem(tourStorageKey(shopId));
     if (!raw) return null;
-    return raw as OnboardingStepId;
+    return raw;
   } catch {
     return null;
   }
@@ -73,12 +76,10 @@ function stepIndex(id: OnboardingStepId): number {
   return TOUR_STEPS.findIndex((s) => s.id === id);
 }
 
-function isStepDataDone(id: TourStepDef["id"], status: OnboardingStatus) {
-  if (id === "profile" || id === "hours") return status.shopDone;
-  if (id === "team") return status.teamDone;
-  if (id === "services") return status.servicesDone;
-  if (id === "products") return status.productsDone;
-  return false;
+function phaseProgress(step: TourStepDef) {
+  const inPhase = TOUR_STEPS.filter((s) => s.phase === step.phase);
+  const index = inPhase.findIndex((s) => s.id === step.id);
+  return { current: index + 1, total: inPhase.length };
 }
 
 export function OnboardingTour({
@@ -107,6 +108,11 @@ export function OnboardingTour({
         return;
       }
       if (stored === "done") return;
+      if (!TOUR_STEPS.some((s) => s.id === stored)) {
+        setWelcomeOpen(true);
+        setActiveId(null);
+        return;
+      }
       setActiveId(stored);
     });
     return () => cancelAnimationFrame(frame);
@@ -126,21 +132,24 @@ export function OnboardingTour({
         setTargetRect(null);
         return;
       }
-      const el = document.querySelector<HTMLElement>(
-        `[data-tour="${activeStep.target}"]`
+      const nodes = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          `[data-tour="${activeStep.target}"]`
+        )
       );
+      const el =
+        nodes.find((node) => {
+          const r = node.getBoundingClientRect();
+          return r.width >= 8 && r.height >= 8;
+        }) ?? null;
+
       if (!el) {
         setTargetRect(null);
         return;
       }
       const r = el.getBoundingClientRect();
-      if (r.width < 8 || r.height < 8) {
-        setTargetRect(null);
-        return;
-      }
-
       const pad = 10;
-      const maxH = Math.min(r.height + pad * 2, window.innerHeight * 0.42);
+      const maxH = Math.min(r.height + pad * 2, window.innerHeight * 0.62);
       setTargetRect({
         top: Math.max(8, r.top - pad),
         left: Math.max(8, r.left - pad),
@@ -150,7 +159,7 @@ export function OnboardingTour({
 
       if (allowScroll && didScrollRef.current !== activeStep.id) {
         didScrollRef.current = activeStep.id;
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.scrollIntoView({ block: "start", behavior: "smooth" });
       }
     },
     [activeStep]
@@ -160,7 +169,7 @@ export function OnboardingTour({
     if (!activeStep) return;
     didScrollRef.current = null;
     const frame = requestAnimationFrame(() => measureTarget(true));
-    const timer = window.setInterval(() => measureTarget(false), 300);
+    const timer = window.setInterval(() => measureTarget(false), 280);
     const onResize = () => measureTarget(false);
     window.addEventListener("resize", onResize);
     window.addEventListener("scroll", onResize, true);
@@ -205,7 +214,7 @@ export function OnboardingTour({
   }
 
   function startTour() {
-    goToStep("profile");
+    goToStep("settings-tabs");
   }
 
   function nextStep() {
@@ -246,8 +255,8 @@ export function OnboardingTour({
       setWelcomeOpen(false);
       toast.success(
         kind === "complete"
-          ? "Guia concluído. Boa operação!"
-          : "Guia encerrado. Você pode retomar pelo menu."
+          ? "Guia concluído. Sua loja está pronta para operar."
+          : "Guia encerrado. Retome quando quiser pelo menu."
       );
       router.push("/admin");
       router.refresh();
@@ -282,7 +291,7 @@ export function OnboardingTour({
     <>
       <Dialog open={welcomeOpen} onOpenChange={setWelcomeOpen}>
         <DialogContent
-          className="max-w-md border-white/10 bg-[#151618] text-[#f5f5f5] sm:rounded-2xl"
+          className="max-w-lg border-white/10 bg-[#151618] text-[#f5f5f5] sm:rounded-2xl"
           showCloseButton={false}
         >
           <DialogHeader>
@@ -290,38 +299,49 @@ export function OnboardingTour({
               <ListChecks className="size-5" />
             </div>
             <DialogTitle className="text-xl text-[#f5f5f5]">
-              Vamos configurar {shopName}
+              Tour completo · {shopName}
             </DialogTitle>
             <DialogDescription className="text-[#b4b6bb]">
-              Em poucos passos você deixa a loja pronta: perfil, horários,
-              equipe, serviços e o caixa. O guia aponta o que preencher em cada
-              tela.
+              Vamos percorrer o painel inteiro: configurações (com cada aba),
+              cadastros, agenda, caixa e financeiro. Em cada tela aparece um
+              balão explicando o que fazer.
             </DialogDescription>
           </DialogHeader>
 
-          <ol className="space-y-2 py-1">
-            {TOUR_STEPS.map((step, i) => (
-              <li
-                key={step.id}
-                className="flex items-center gap-3 rounded-lg border border-white/10 bg-[#1a1b1e] px-3 py-2.5 text-sm"
-              >
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-[rgb(236_241_94_/_35%)] text-[11px] font-semibold text-[#ecf15e]">
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 text-[#f5f5f5]">
-                  {step.title}
-                  {step.optional ? (
-                    <span className="ml-1 text-xs text-[#8b8d93]">
-                      (opcional)
+          <div className="space-y-2 py-1">
+            {(Object.keys(TOUR_PHASES) as TourPhaseId[]).map((phaseId) => {
+              const phase = TOUR_PHASES[phaseId];
+              const steps = TOUR_STEPS.filter((s) => s.phase === phaseId);
+              const doneCount = steps.filter((s) =>
+                isTourStepDone(s.id, status)
+              ).length;
+              return (
+                <div
+                  key={phaseId}
+                  className="rounded-xl border border-white/10 bg-[#1a1b1e] px-3.5 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-[#f5f5f5]">
+                        {phase.label}
+                      </p>
+                      <p className={cn("mt-0.5 text-xs", ADMIN_SURFACE.muted)}>
+                        {phase.description}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px] tabular-nums text-[#8b8d93]">
+                      {doneCount}/{steps.length}
                     </span>
-                  ) : null}
-                </span>
-                {isStepDataDone(step.id, status) ? (
-                  <Check className="size-4 shrink-0 text-[#ecf15e]" />
-                ) : null}
-              </li>
-            ))}
-          </ol>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className={cn("text-xs leading-relaxed", ADMIN_SURFACE.muted)}>
+            {progressTotal} passos no total · alguns são opcionais (dias
+            especiais, recepção e produtos).
+          </p>
 
           <DialogFooter className="flex-col gap-2 border-white/10 bg-transparent sm:flex-col">
             <Button
@@ -329,7 +349,7 @@ export function OnboardingTour({
               className={cn(ADMIN_SURFACE.btnPrimary, "w-full")}
               onClick={startTour}
             >
-              Iniciar
+              Começar o tour
               <ArrowRight className="size-4" />
             </Button>
             <Button
@@ -384,61 +404,32 @@ function TourOverlay({
   onSkip: () => void;
   onClose: () => void;
 }) {
+  const phase = TOUR_PHASES[step.phase];
+  const local = phaseProgress(step);
+
   const balloonStyle = useMemo(() => {
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
-      return {
-        left: 16,
-        right: 16,
-        bottom: 16,
-        width: "auto",
-        maxWidth: "none",
-      } as CSSProperties;
-    }
-
-    if (!rect) {
-      return {
-        top: "auto",
-        bottom: 24,
-        left: "50%",
-        transform: "translateX(-50%)",
-        maxWidth: 360,
-      } as CSSProperties;
-    }
-
-    const gap = 14;
-    const spaceBelow = window.innerHeight - (rect.top + rect.height);
-    const placeBelow = spaceBelow > 260;
-
-    const left = Math.min(
-      Math.max(16, rect.left),
-      window.innerWidth - 16 - 360
-    );
-
-    if (placeBelow) {
-      return {
-        top: rect.top + rect.height + gap,
-        left: Math.max(16, left),
-        maxWidth: 360,
-      } as CSSProperties;
-    }
-
+    // Balão fixo embaixo: não tapa o conteúdo e funciona bem no mobile.
     return {
-      top: Math.max(16, rect.top - gap - 200),
-      left: Math.max(16, left),
-      maxWidth: 360,
+      left: 12,
+      right: 12,
+      bottom: 12,
+      width: "auto",
+      maxWidth: 480,
+      marginLeft: "auto",
+      marginRight: "auto",
     } as CSSProperties;
-  }, [rect]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[80]">
       {rect ? (
         <>
           <div
-            className="pointer-events-none absolute left-0 right-0 top-0 bg-black/55"
+            className="pointer-events-none absolute left-0 right-0 top-0 bg-black/50"
             style={{ height: Math.max(0, rect.top) }}
           />
           <div
-            className="pointer-events-none absolute left-0 bg-black/55"
+            className="pointer-events-none absolute left-0 bg-black/50"
             style={{
               top: rect.top,
               width: Math.max(0, rect.left),
@@ -446,7 +437,7 @@ function TourOverlay({
             }}
           />
           <div
-            className="pointer-events-none absolute bg-black/55"
+            className="pointer-events-none absolute bg-black/50"
             style={{
               top: rect.top,
               left: rect.left + rect.width,
@@ -455,11 +446,11 @@ function TourOverlay({
             }}
           />
           <div
-            className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/55"
+            className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/50"
             style={{ top: rect.top + rect.height }}
           />
           <div
-            className="pointer-events-none absolute rounded-xl border-2 border-[#ecf15e] shadow-[0_0_0_4px_rgba(236,241,94,0.2)]"
+            className="pointer-events-none absolute rounded-xl border-2 border-[#ecf15e] shadow-[0_0_0_4px_rgba(236,241,94,0.18)]"
             style={{
               top: rect.top,
               left: rect.left,
@@ -469,19 +460,22 @@ function TourOverlay({
           />
         </>
       ) : (
-        <div className="pointer-events-none absolute inset-0 bg-black/40" />
+        <div className="pointer-events-none absolute inset-0 bg-black/35" />
       )}
 
       <div
-        className="absolute z-[81] rounded-2xl border border-white/15 bg-[#151618] p-4 text-[#f5f5f5] shadow-2xl"
+        className="absolute z-[81] max-h-[min(52vh,420px)] overflow-y-auto rounded-2xl border border-white/15 bg-[#151618] p-4 text-[#f5f5f5] shadow-2xl sm:p-5"
         style={balloonStyle}
       >
         <div className="mb-3 flex items-start justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <p className={ADMIN_SURFACE.sectionLabel}>
-              Passo {stepNumber} de {stepTotal}
+              {phase.label} · {local.current}/{local.total}
             </p>
-            <h3 className="mt-1 text-base font-semibold tracking-tight">
+            <p className={cn("mt-1 text-[11px] tabular-nums", ADMIN_SURFACE.muted)}>
+              Passo {stepNumber} de {stepTotal} no tour
+            </p>
+            <h3 className="mt-1.5 text-base font-semibold tracking-tight sm:text-lg">
               {step.title}
             </h3>
           </div>
@@ -497,11 +491,22 @@ function TourOverlay({
 
         <p className={cn("text-sm leading-relaxed", ADMIN_SURFACE.muted)}>
           {waiting
-            ? "Carregando a tela… em instantes você consegue editar aqui."
+            ? "Abrindo a tela… em instantes o destaque aparece para você editar."
             : step.body}
         </p>
 
-        <div className="mt-4 flex flex-col gap-2">
+        {!waiting && step.bullets && step.bullets.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {step.bullets.map((item) => (
+              <li key={item} className="flex gap-2.5 text-sm leading-relaxed">
+                <Check className="mt-0.5 size-3.5 shrink-0 text-[#ecf15e]" />
+                <span className="text-[#c8c9cd]">{item}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4">
           <div className="flex gap-2">
             <Button
               type="button"
@@ -513,11 +518,11 @@ function TourOverlay({
             </Button>
             <Button
               type="button"
-              className={cn(ADMIN_SURFACE.btnPrimary, "flex-[1.4]")}
+              className={cn(ADMIN_SURFACE.btnPrimary, "flex-[1.35]")}
               onClick={onNext}
               disabled={pending}
             >
-              {stepNumber >= stepTotal ? "Concluir" : "Próximo"}
+              {stepNumber >= stepTotal ? "Concluir tour" : "Próximo"}
               <ArrowRight className="size-4" />
             </Button>
           </div>
@@ -528,7 +533,7 @@ function TourOverlay({
               className="w-full text-xs text-[#b4b6bb] hover:bg-white/5 hover:text-[#f5f5f5]"
               onClick={onNext}
             >
-              Pular produtos
+              Pular este passo
             </Button>
           ) : null}
           <button

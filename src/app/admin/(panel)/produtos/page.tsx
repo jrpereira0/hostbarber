@@ -38,7 +38,10 @@ export default async function ProductsPage() {
         ADMIN_SURFACE.page
       )}
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      <div
+        data-tour="tour-products-page"
+        className="mx-auto flex w-full max-w-6xl flex-col gap-4"
+      >
         <PageHeader
           tone="dark"
           title="Produtos"

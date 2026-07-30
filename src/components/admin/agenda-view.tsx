@@ -784,7 +784,10 @@ export function AgendaView({
   return (
     <div className="admin-agenda -m-4 md:-m-8 min-h-full min-w-0 overflow-x-clip">
       {/* Mobile */}
-      <div className="flex flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:hidden">
+      <div
+        data-tour="tour-agenda-main"
+        className="flex flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:hidden"
+      >
         <AgendaToolbar {...toolbarProps} mobile />
 
         {showMobileProFilter ? (
@@ -882,7 +885,10 @@ export function AgendaView({
 
       {/* Desktop: grade preenche a largura; calendário colado à direita */}
       <div className="agenda-desktop-layout hidden min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-start lg:gap-4 lg:p-4 xl:grid-cols-[minmax(0,1fr)_17rem] xl:gap-5 xl:p-5">
-        <section className="agenda-main-frame min-w-0 rounded-2xl border">
+        <section
+          data-tour="tour-agenda-main"
+          className="agenda-main-frame min-w-0 rounded-2xl border"
+        >
           <AgendaToolbar {...toolbarProps} />
           <div className="px-3 pb-4 pt-3 xl:px-4">
             {isNavigating ? (

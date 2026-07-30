@@ -93,13 +93,15 @@ export default async function FinanceiroPage({ searchParams }: PageProps) {
     : (last7Report?.byDay ?? []);
 
   return (
-    <FinanceView
-      from={from}
-      to={to}
-      today={today}
-      metric={metric}
-      report={report}
-      last7Days={last7Days}
-    />
+    <div data-tour="tour-finance-page">
+      <FinanceView
+        from={from}
+        to={to}
+        today={today}
+        metric={metric}
+        report={report}
+        last7Days={last7Days}
+      />
+    </div>
   );
 }

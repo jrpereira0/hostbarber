@@ -32,8 +32,8 @@ Atualizado conforme o sistema evolui (última revisão: jul/2026).
 | `src/app/admin/(panel)/configuracoes` | Perfil público da barbearia, horários, mensagens e recepção |
 | `src/app/admin/(panel)/primeiros-passos` | Redireciona para o guia interativo (`/admin?guia=1`) |
 | `src/app/admin/(panel)/minha-conta` | Tela do barbeiro para ver a própria grade e trocar a senha |
-| `src/lib/onboarding.ts` | Passos do guia e status de configuração da loja |
-| `src/components/admin/onboarding-tour.tsx` | Modal de boas-vindas + balões nas telas reais |
+| `src/lib/onboarding.ts` | Passos e fases do tour completo do painel |
+| `src/components/admin/onboarding-tour.tsx` | Modal + balões didáticos nas telas reais |
 | `src/app/api/agenda/session` | `GET` sessão atual / `POST` entrar com WhatsApp / `DELETE` sair |
 | `src/app/api/v1/customers/me` | Perfil do cliente autenticado (`GET` / `PATCH` — Minha conta no site) |
 | `src/lib/client-api-session.ts` | Cookie assinado da sessão do cliente no `/agenda` |

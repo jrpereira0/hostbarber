@@ -31,7 +31,6 @@ type SettingsViewProps = {
   confirmationWhatsappMessage: string;
   confirmationWhatsappEnabled: boolean;
   receptionStaff: ReceptionStaffItem[];
-  /** Aba inicial (ex.: guia de onboarding). */
   defaultTab?: string;
 };
 
@@ -84,23 +83,18 @@ export function SettingsView({
       onValueChange={handleTabChange}
       className="flex w-full flex-col gap-4"
     >
-      <div className="-mx-1 overflow-x-auto px-1 pb-0.5">
+      <div
+        data-tour="tour-settings-tabs"
+        className="-mx-1 overflow-x-auto px-1 pb-0.5"
+      >
         <TabsList className="h-auto w-max min-w-full flex-nowrap justify-start gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
-          <TabsTrigger
-            value="perfil"
-            className="flex-none px-3"
-            data-tour="tour-tab-perfil"
-          >
+          <TabsTrigger value="perfil" className="flex-none px-3">
             Perfil
           </TabsTrigger>
           <TabsTrigger value="link" className="flex-none px-3">
             Link
           </TabsTrigger>
-          <TabsTrigger
-            value="horarios"
-            className="flex-none px-3"
-            data-tour="tour-tab-horarios"
-          >
+          <TabsTrigger value="horarios" className="flex-none px-3">
             Horários
           </TabsTrigger>
           <TabsTrigger value="excecoes" className="flex-none px-3">
@@ -129,8 +123,13 @@ export function SettingsView({
         </div>
       </TabsContent>
 
-      <TabsContent value="link" className="mt-0">
-        <BookingLinkForm initialSlug={slug} />
+      <TabsContent value="link" className="mt-0" forceMount>
+        <div
+          data-tour="tour-settings-link"
+          className={cn(tab !== "link" && "hidden")}
+        >
+          <BookingLinkForm initialSlug={slug} />
+        </div>
       </TabsContent>
 
       <TabsContent value="horarios" className="mt-0" forceMount>
@@ -145,23 +144,38 @@ export function SettingsView({
         </div>
       </TabsContent>
 
-      <TabsContent value="excecoes" className="mt-0">
-        <ExceptionsCard
-          exceptions={exceptions}
-          professionals={professionals}
-        />
+      <TabsContent value="excecoes" className="mt-0" forceMount>
+        <div
+          data-tour="tour-settings-exceptions"
+          className={cn(tab !== "excecoes" && "hidden")}
+        >
+          <ExceptionsCard
+            exceptions={exceptions}
+            professionals={professionals}
+          />
+        </div>
       </TabsContent>
 
-      <TabsContent value="mensagens" className="mt-0">
-        <ConfirmationMessageForm
-          initialMessage={confirmationWhatsappMessage}
-          initialEnabled={confirmationWhatsappEnabled}
-          shopName={profile.shopName}
-        />
+      <TabsContent value="mensagens" className="mt-0" forceMount>
+        <div
+          data-tour="tour-settings-messages"
+          className={cn(tab !== "mensagens" && "hidden")}
+        >
+          <ConfirmationMessageForm
+            initialMessage={confirmationWhatsappMessage}
+            initialEnabled={confirmationWhatsappEnabled}
+            shopName={profile.shopName}
+          />
+        </div>
       </TabsContent>
 
-      <TabsContent value="recepcao" className="mt-0">
-        <ReceptionStaffForm initialStaff={receptionStaff} />
+      <TabsContent value="recepcao" className="mt-0" forceMount>
+        <div
+          data-tour="tour-settings-reception"
+          className={cn(tab !== "recepcao" && "hidden")}
+        >
+          <ReceptionStaffForm initialStaff={receptionStaff} />
+        </div>
       </TabsContent>
     </Tabs>
   );

@@ -58,13 +58,15 @@ export default async function CaixasPage({ searchParams }: PageProps) {
   ]);
 
   return (
-    <CashRegisterHistoryView
-      from={from}
-      to={to}
-      today={today}
-      sessions={sessions}
-      openCashRegister={openCashRegister}
-      responsibleOptions={responsibleOptions}
-    />
+    <div data-tour="tour-caixas-page">
+      <CashRegisterHistoryView
+        from={from}
+        to={to}
+        today={today}
+        sessions={sessions}
+        openCashRegister={openCashRegister}
+        responsibleOptions={responsibleOptions}
+      />
+    </div>
   );
 }
